@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EMONI – Static OK</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <h1>EMONI – Static OK</h1>
+  <p>If you see this, Express static + Cloudflare tunnel are delivering HTML correctly.</p>
+  <script src="/vendor/apexcharts/apexcharts.min.js"></script>
+  <script>
+    document.body.insertAdjacentHTML('beforeend', '<p>ApexCharts type: ' + (typeof ApexCharts) + '</p>');
+  </script>
+</body>
+</html>

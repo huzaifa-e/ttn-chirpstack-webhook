@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>EMONI – Verbrauchs-Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .row-secondary { margin-top: 12px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    label { font-weight:600; }
+    select, input, button { padding:6px 8px; }
+    #status { margin:6px 0; color:#666; }
+    #last { margin:6px 0; font-size:14px; }
+    h1 { margin-bottom: 12px; }
+    h2 { margin-top: 24px; margin-bottom: 8px; }
+    #chart,
+    #chartBattery,
+    #chartHourPie,
+    #chartHourBar,
+    #chartWeekday,
+    #chartAnomalies,
+    #chartForecast,
+    #chartMonthly,
+    #chartActiveWindow {
+      max-width: 1100px;
+      width: 100%;
+      margin-top: 12px;
+    }
+    #batteryCount { margin-top: 6px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>EMONI – Gasverbrauch &amp; Batteriespannung</h1>
+
+  <div class="row">
+    <label>Device:</label>
+    <select id="devSel"></select>
+    <label>Tage:</label>
+    <input id="days" type="number" min="1" max="365" value="30" />
+    <label>TZ:</label>
+    <input id="tz" type="text" value="Europe/Berlin" size="16" />
+    <button id="refresh">Aktualisieren</button>
+  </div>
+
+  <div class="row-secondary">
+    <label>Von:</label>
+    <input id="fromDt" type="datetime-local" />
+    <label>Bis:</label>
+    <input id="toDt" type="datetime-local" />
+    <button id="countBtn">Zählungen zählen</button>
+  </div>
+  <div id="batteryCount">Übertragungen mit Batteriespannung im Zeitraum: —</div>
+
+  <div id="status"></div>
+  <div id="last">Letzter Zählerstand: —</div>
+
+  <h2>Tagesverbrauch (Bar) &amp; Zählerstand (Linie)</h2>
+  <div id="chart"></div>
+
+  <h2>Batteriespannung &amp; Zählerstand über Zeit</h2>
+  <div id="chartBattery"></div>
+
+  <h2>RSSI über Zeit</h2>
+  <div id="chartRssi"></div>
+
+  <h2>Tagesprofil nach Uhrzeit</h2>
+  <div id="chartHourPie"></div>
+  <div id="chartHourBar"></div>
+
+  <h2>Verbrauch nach Wochentag</h2>
+  <div id="chartWeekday"></div>
+
+  <h2>Anomalien im Tagesverbrauch</h2>
+  <div id="chartAnomalies"></div>
+
+  <h2>Prognose des Verbrauchs</h2>
+  <div id="chartForecast"></div>
+
+  <h2>Monatliche Verbrauchssummen</h2>
+  <div id="chartMonthly"></div>
+
+  <h2>Aktive Nutzungsfenster pro Tag</h2>
+  <div id="chartActiveWindow"></div>
+
+  <script src="/vendor/apexcharts/apexcharts.min.js"></script>
+  <script>
+    const devSel         = document.getElementById('devSel');
+    const daysEl         = document.getElementById('days');
+    const tzEl           = document.getElementById('tz');
+    const statusEl       = document.getElementById('status');
+    const lastEl         = document.getElementById('last');
+    const fromDtEl       = document.getElementById('fromDt');
+    const toDtEl         = document.getElementById('toDt');
+    const batteryCountEl = document.getElementById('batteryCount');
+
+    let chart;             // daily consumption
+    let chartBattery;
+    let chartRssi;      // battery + meter
+    let chartHourPie;
+    let chartHourBar;
+    let chartWeekday;
+    let chartAnomalies;
+    let chartForecast;
+    let chartMonthly;
+    let chartActiveWindow;
+
+    let evtSource = null;
+    let liveUpdateTimer = null;
+
+    const isDesktop = () => window.innerWidth > 800;
+
+    async function loadDevices() {
+      const j = await (await fetch('/api/devices')).json();
+      devSel.innerHTML = '';
+      (j.devices || []).forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.dev_eui;
+        o.textContent = d.device_name ? `${d.dev_eui} — ${d.device_name}` : d.dev_eui;
+        devSel.appendChild(o);
+      });
+      if (!devSel.value) statusEl.textContent = 'Noch keine Geräte — warte auf Uplinks.';
+      else statusEl.textContent = '';
+    }
+
+    async function loadLast() {
+      const devEui = devSel.value;
+      if (!devEui) { lastEl.textContent = 'Letzter Zählerstand: —'; return; }
+      const j = await (await fetch(`/api/last-reading?devEui=${encodeURIComponent(devEui)}`)).json();
+      if (!j.last) { lastEl.textContent = 'Letzter Zählerstand: —'; return; }
+      const at = new Date(j.last.at);
+      const batt = (j.last.battery_mv != null)
+        ? `, Batterie: ${j.last.battery_mv} mV`
+        : '';
+      lastEl.textContent = `Letzter Zählerstand: ${j.last.meter_value} @ ${at.toLocaleString('de-DE')}${batt}`;
+    }
+
+    // ---------- DAILY CONSUMPTION (bar + line) ----------
+
+    function buildDailyOptions(labels, cons, closing, unitLabel) {
+      const maxBar = Math.ceil(Math.max(0, ...cons.map(v => v || 0)));
+
+      const series = [
+        { name: 'Verbrauch',   type: 'bar',  data: cons    },
+        { name: 'Zählerstand', type: 'line', data: closing },
+      ];
+
+      const yaxis = [
+        {
+          seriesName: 'Verbrauch',
+          show: true,
+          title: { text: `${unitLabel} pro Tag` },
+          max: maxBar > 0 ? maxBar : undefined,
+          labels: {
+            formatter: val => (val ? val.toFixed(2).replace('.', ',') : '0')
+          }
+        },
+        {
+          opposite: true,
+          seriesName: 'Zählerstand',
+          show: true,
+          labels: {
+            formatter: val => (val ? val.toFixed(2).replace('.', ',') : '0')
+          }
+        }
+      ];
+
+      const colors = ['#f59f00', '#3366cc'];
+
+      return {
+        chart: {
+          type: 'bar',
+          height: 400,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+          stacked: true,
+          stackedType: 'normal',
+          zoom: { enabled: false },
+          selection: { enabled: false },
+        },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        plotOptions: { bar: { endingShape: 'rounded', borderRadius: 2 } },
+        fill: { opacity: 1 },
+        tooltip: {
+          theme: 'dark',
+          shared: true,
+          intersect: false,
+          x: {
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+            }
+          },
+          y: { formatter: val => (val ? Number(val).toFixed(2).replace('.', ',') : '0') }
+        },
+        xaxis: {
+          type: 'category',
+          categories: labels,
+          tickAmount: 10,
+          labels: {
+            showDuplicates: false,
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+            }
+          },
+          axisBorder: { show: false }
+        },
+        yaxis,
+        series,
+        colors,
+        legend: { show: true }
+      };
+    }
+
+    async function loadConsumptionSeries() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 30);
+      const tz   = tzEl.value || 'Europe/Berlin';
+
+      statusEl.textContent = 'Lade…';
+      const j = await (await fetch(`/api/consumption/daily?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+      statusEl.textContent = '';
+
+      const labels  = j.series.map(x => x.date);
+      const cons    = j.series.map(x => x.consumption ?? 0);
+      const closing = j.series.map(x => x.closing ?? null);
+
+      const options = buildDailyOptions(labels, cons, closing, 'kWh');
+
+      if (chart) {
+        chart.updateOptions({
+          ...options,
+          chart: { ...options.chart, animations: { enabled: isDesktop() } }
+        });
+      } else {
+        chart = new ApexCharts(document.querySelector("#chart"), options);
+        chart.render();
+      }
+    }
+
+    // ---------- BATTERY + METER OVER TIME ----------
+
+    async function loadBatterySeries() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 30);
+
+      const resp = await fetch(`/api/readings?devEui=${encodeURIComponent(devEui)}`);
+      const j = await resp.json();
+      let readings = j.readings || [];
+      if (!readings.length) return;
+
+      const now = Date.now();
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
+      readings = readings.filter(r => new Date(r.at).getTime() >= cutoff);
+      if (!readings.length) return;
+
+      const labels      = readings.map(r => r.at);
+      const voltValues  = readings.map(r => r.battery_mv != null ? r.battery_mv : null);
+      const meterValues = readings.map(r => r.meter_value);
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 320,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+          zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+        },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        series: [
+          { name: 'Batteriespannung (mV)', data: voltValues },
+          { name: 'Zählerstand',           data: meterValues },
+        ],
+        xaxis: {
+          type: 'datetime',
+          categories: labels,
+          labels: {
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleString('de-DE', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+            },
+          },
+        },
+        yaxis: [
+          {
+            title: { text: 'Spannung (mV)' },
+            labels: { formatter: (val) => `${Math.round(val)}` },
+          },
+          {
+            opposite: true,
+            title: { text: 'Zählerstand' },
+            labels: {
+              formatter: (val) => val.toFixed(2).replace('.', ','),
+            },
+          },
+        ],
+        tooltip: {
+          shared: true,
+          x: {
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleString('de-DE');
+            },
+          },
+          y: {
+            formatter: (val, opts) => {
+              if (opts.seriesIndex === 0) return `${Math.round(val)} mV`;
+              return `${Number(val).toFixed(2).replace('.', ',')}`;
+            },
+          },
+        },
+        legend: { show: true },
+      };
+
+      if (chartBattery) {
+        chartBattery.updateOptions({
+          ...options,
+          chart: { ...options.chart, animations: { enabled: isDesktop() } },
+        });
+      } else {
+        chartBattery = new ApexCharts(
+          document.querySelector("#chartBattery"),
+          options
+        );
+        chartBattery.render();
+      }
+    }
+
+
+    async function loadRssiSeries() {
+      const devEui = devSel.value;
+      const days = Number(daysEl.value || 30);
+
+      const resp = await fetch();
+      const j = await resp.json();
+      let readings = j.readings || [];
+
+      const now = Date.now();
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
+      readings = readings.filter(r => new Date(r.at).getTime() >= cutoff);
+
+      const labels = readings.map(r => r.at);
+      const rssiValues = readings.map(r => (r.rssi != null ? r.rssi : null));
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 260,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+          zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+        },
+        series: [{ name: 'RSSI (dBm)', data: rssiValues }],
+        xaxis: { type: 'datetime', categories: labels },
+        yaxis: {
+          title: { text: 'RSSI (dBm)' },
+          labels: { formatter: v =>  },
+        },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: false,
+          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+          y: {
+            formatter: (val, opts) => {
+              const idx = opts.dataPointIndex;
+              const mv = readings[idx]?.meter_value;
+              const snr = readings[idx]?.snr;
+              const parts = [];
+              parts.push();
+              if (snr != null) parts.push();
+              if (mv != null) parts.push();
+              return parts.join(' | ');
+            }
+          }
+        },
+        legend: { show: true }
+      };
+
+      if (chartRssi) {
+        chartRssi.updateOptions({
+          ...options,
+          chart: { ...options.chart, animations: { enabled: isDesktop() } }
+        });
+      } else {
+        chartRssi = new ApexCharts(document.querySelector('#chartRssi'), options);
+        chartRssi.render();
+      }
+    }
+
+
+    // ---------- TIME-OF-DAY CHARTS ----------
+
+    async function loadByHourCharts() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 30);
+      const tz   = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/by-hour?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+
+      const pieLabels = (j.buckets4 || []).map(b => b.label);
+      const pieSeries = (j.buckets4 || []).map(b => b.kwh || 0);
+
+      const pieOptions = {
+        chart: {
+          type: 'donut',
+          height: 320,
+          fontFamily: 'inherit',
+        },
+        labels: pieLabels,
+        series: pieSeries,
+        legend: { position: 'right' },
+        tooltip: {
+          y: {
+            formatter: (val, opts) => {
+              const total = pieSeries.reduce((a,b)=>a+b,0) || 1;
+              const pct = (val / total) * 100;
+              return `${val.toFixed(2).replace('.', ',')} kWh (${pct.toFixed(1)}%)`;
+            }
+          }
+        }
+      };
+
+      if (chartHourPie) chartHourPie.updateOptions(pieOptions);
+      else {
+        chartHourPie = new ApexCharts(
+          document.querySelector("#chartHourPie"),
+          pieOptions
+        );
+        chartHourPie.render();
+      }
+
+      const hours = j.hours24 || [];
+      const barCategories = hours.map(h => String(h.hour).padStart(2, '0') + ':00');
+      const barData = hours.map(h => h.kwh || 0);
+
+      const barOptions = {
+        chart: {
+          type: 'bar',
+          height: 260,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+        },
+        series: [{ name: 'Verbrauch', data: barData }],
+        xaxis: {
+          categories: barCategories,
+          labels: { rotate: -45 }
+        },
+        yaxis: {
+          title: { text: 'kWh' },
+          labels: {
+            formatter: (v) => v.toFixed(1).replace('.', ','),
+          },
+        },
+        dataLabels: { enabled: false },
+        tooltip: {
+          y: { formatter: (v) => v.toFixed(2).replace('.', ',') + ' kWh' }
+        }
+      };
+
+      if (chartHourBar) chartHourBar.updateOptions(barOptions);
+      else {
+        chartHourBar = new ApexCharts(
+          document.querySelector("#chartHourBar"),
+          barOptions
+        );
+        chartHourBar.render();
+      }
+    }
+
+    // ---------- WEEKDAY CHART ----------
+
+    async function loadWeekdayChart() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 30);
+      const tz   = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/by-weekday?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+      const cats = (j.weekdays || []).map(w => w.label);
+      const data = (j.weekdays || []).map(w => w.kwh || 0);
+
+      const options = {
+        chart: {
+          type: 'bar',
+          height: 260,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+        },
+        series: [{ name: 'Verbrauch', data }],
+        xaxis: { categories: cats },
+        yaxis: {
+          title: { text: 'kWh pro Tag (Ø)' },
+          labels: {
+            formatter: (v) => v.toFixed(1).replace('.', ','),
+          },
+        },
+        dataLabels: { enabled: false },
+        tooltip: {
+          y: { formatter: (v) => v.toFixed(2).replace('.', ',') + ' kWh' }
+        }
+      };
+
+      if (chartWeekday) chartWeekday.updateOptions(options);
+      else {
+        chartWeekday = new ApexCharts(
+          document.querySelector("#chartWeekday"),
+          options
+        );
+        chartWeekday.render();
+      }
+    }
+
+    // ---------- ANOMALY CHART ----------
+
+    async function loadAnomalyChart() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 60);
+      const tz   = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/daily-anomalies?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+      const labels = j.series.map(x => x.date);
+      const cons   = j.series.map(x => x.consumption ?? 0);
+      const anomalies = j.series.map(x => x.anomaly ? (x.consumption ?? null) : null);
+
+      const options = {
+        chart: {
+          type: 'bar',
+          height: 320,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+        },
+        series: [
+          { name: 'Verbrauch', type: 'column', data: cons },
+          { name: 'Anomalien', type: 'scatter', data: anomalies },
+        ],
+        xaxis: {
+          categories: labels,
+          labels: {
+            rotate: -45,
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+            }
+          }
+        },
+        yaxis: {
+          title: { text: 'kWh pro Tag' },
+          labels: {
+            formatter: (v) => v.toFixed(1).replace('.', ','),
+          },
+        },
+        markers: {
+          size: [0, 6]
+        },
+        colors: ['#4c6ef5', '#fa5252'],
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: false,
+          y: { formatter: (v) => v.toFixed(2).replace('.', ',') + ' kWh' }
+        }
+      };
+
+      if (chartAnomalies) chartAnomalies.updateOptions(options);
+      else {
+        chartAnomalies = new ApexCharts(
+          document.querySelector("#chartAnomalies"),
+          options
+        );
+        chartAnomalies.render();
+      }
+    }
+
+    // ---------- FORECAST CHART ----------
+
+    async function loadForecastChart() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const daysPast = Number(daysEl.value || 60);
+      const tz       = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/forecast?devEui=${encodeURIComponent(devEui)}&daysPast=${daysPast}&daysFuture=30&tz=${encodeURIComponent(tz)}`)).json();
+
+      const histSeries = (j.history || [])
+        .filter(p => p.consumption != null)
+        .map(p => ({ x: p.date, y: p.consumption }));
+
+      const fcSeries = (j.forecast || [])
+        .map(p => ({ x: p.date, y: p.pred }));
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 320,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+          zoom: { enabled: false },
+        },
+        series: [
+          { name: 'Historisch', data: histSeries },
+          { name: 'Prognose',   data: fcSeries },
+        ],
+        xaxis: {
+          type: 'datetime',
+          labels: {
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+            }
+          }
+        },
+        yaxis: {
+          title: { text: 'kWh pro Tag' },
+          labels: {
+            formatter: (v) => v.toFixed(1).replace('.', ','),
+          },
+        },
+        stroke: { width: 2, curve: 'smooth', dashArray: [0, 5] },
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: true,
+          y: { formatter: (v) => v.toFixed(2).replace('.', ',') + ' kWh' }
+        },
+        legend: { show: true }
+      };
+
+      if (chartForecast) chartForecast.updateOptions(options);
+      else {
+        chartForecast = new ApexCharts(
+          document.querySelector("#chartForecast"),
+          options
+        );
+        chartForecast.render();
+      }
+    }
+
+    // ---------- MONTHLY TOTALS ----------
+
+    async function loadMonthlyChart() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const tz = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/monthly?devEui=${encodeURIComponent(devEui)}&months=12&tz=${encodeURIComponent(tz)}`)).json();
+      const labels = (j.monthsData || []).map(m => m.month);
+      const data   = (j.monthsData || []).map(m => m.kwh || 0);
+
+      const options = {
+        chart: {
+          type: 'bar',
+          height: 320,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+        },
+        series: [{ name: 'Monatssumme', data }],
+        xaxis: {
+          categories: labels,
+          labels: {
+            formatter: (val) => {
+              const [y, m] = String(val).split('-');
+              return `${m}.${y}`;
+            }
+          }
+        },
+        yaxis: {
+          title: { text: 'kWh pro Monat' },
+          labels: { formatter: (v) => v.toFixed(0).replace('.', ',') },
+        },
+        dataLabels: { enabled: false },
+        tooltip: {
+          y: { formatter: (v) => v.toFixed(0).replace('.', ',') + ' kWh' }
+        }
+      };
+
+      if (chartMonthly) chartMonthly.updateOptions(options);
+      else {
+        chartMonthly = new ApexCharts(
+          document.querySelector("#chartMonthly"),
+          options
+        );
+        chartMonthly.render();
+      }
+    }
+
+    // ---------- ACTIVE WINDOW CHART ----------
+
+    function minutesToLabel(mins) {
+      if (mins == null) return '–';
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    async function loadActiveWindowChart() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 30);
+      const tz   = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/active-window?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+      const labels = (j.daysData || []).map(d => d.date);
+      const startData = (j.daysData || []).map(d => d.start_minutes != null ? d.start_minutes : null);
+      const endData   = (j.daysData || []).map(d => d.end_minutes != null ? d.end_minutes : null);
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 320,
+          fontFamily: 'inherit',
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+          zoom: { enabled: false },
+        },
+        series: [
+          { name: 'Startzeit', data: startData },
+          { name: 'Endzeit',   data: endData },
+        ],
+        xaxis: {
+          categories: labels,
+          labels: {
+            rotate: -45,
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+            }
+          }
+        },
+        yaxis: {
+          min: 0,
+          max: 24 * 60,
+          tickAmount: 6,
+          labels: {
+            formatter: (v) => minutesToLabel(Math.round(v)),
+          },
+          title: { text: 'Tageszeit' },
+        },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: true,
+          y: {
+            formatter: (v) => minutesToLabel(Math.round(v)),
+          },
+        },
+        legend: { show: true }
+      };
+
+      if (chartActiveWindow) chartActiveWindow.updateOptions(options);
+      else {
+        chartActiveWindow = new ApexCharts(
+          document.querySelector("#chartActiveWindow"),
+          options
+        );
+        chartActiveWindow.render();
+      }
+    }
+
+    // ---------- BATTERY COUNT IN RANGE ----------
+
+    function toIsoFromDatetimeLocal(el) {
+      const v = el.value;
+      if (!v) return null;
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString();
+    }
+
+    async function countBatteryTransmissions() {
+      const devEui = devSel.value || '';
+      if (!devEui) {
+        batteryCountEl.textContent = 'Übertragungen mit Batteriespannung im Zeitraum: — (kein Device gewählt)';
+        return;
+      }
+
+      const fromIso = toIsoFromDatetimeLocal(fromDtEl);
+      const toIso   = toIsoFromDatetimeLocal(toDtEl);
+
+      if (!fromIso || !toIso) {
+        batteryCountEl.textContent = 'Bitte gültige Von- und Bis-Zeitpunkte wählen.';
+        return;
+      }
+
+      if (new Date(fromIso) > new Date(toIso)) {
+        batteryCountEl.textContent = 'Von-Zeitpunkt muss vor Bis-Zeitpunkt liegen.';
+        return;
+      }
+
+      const url = `/api/battery/count?devEui=${encodeURIComponent(devEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        batteryCountEl.textContent = `Fehler beim Abruf: HTTP ${res.status}`;
+        return;
+      }
+      const j = await res.json();
+      batteryCountEl.textContent =
+        `Übertragungen mit Batteriespannung im Zeitraum: ${j.count} (Device ${j.devEui || devEui})`;
+    }
+
+    // ---------- LIVE EVENTS (SSE) ----------
+
+    function setupEvents() {
+      if (!window.EventSource) {
+        console.log('[SSE] EventSource not supported in this browser');
+        return;
+      }
+      evtSource = new EventSource('/events');
+      evtSource.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type !== 'reading') return;
+
+          const currentDev = devSel.value;
+          if (!currentDev) return;
+          if (msg.devEui && msg.devEui !== currentDev) return;
+
+          // coalesce multiple quick updates into one refresh
+          if (liveUpdateTimer) clearTimeout(liveUpdateTimer);
+          liveUpdateTimer = setTimeout(async () => {
+            await loadLast();
+            await loadConsumptionSeries();
+            await loadBatterySeries();
+          }, 800);
+        } catch (e) {
+          console.warn('[SSE] parse error', e);
+        }
+      };
+      evtSource.onerror = () => {
+        console.warn('[SSE] connection error');
+      };
+    }
+
+    // ---------- wiring ----------
+
+    document.getElementById('refresh').addEventListener('click', async () => {
+      await loadLast();
+      await loadConsumptionSeries();
+      await loadBatterySeries();
+      await loadByHourCharts();
+      await loadWeekdayChart();
+      await loadAnomalyChart();
+      await loadForecastChart();
+      await loadMonthlyChart();
+      await loadActiveWindowChart();
+    });
+
+    devSel.addEventListener('change', async () => {
+      await loadLast();
+      await loadConsumptionSeries();
+      await loadBatterySeries();
+      await loadByHourCharts();
+      await loadWeekdayChart();
+      await loadAnomalyChart();
+      await loadForecastChart();
+      await loadMonthlyChart();
+      await loadActiveWindowChart();
+    });
+
+    document.getElementById('countBtn').addEventListener('click', async () => {
+      await countBatteryTransmissions();
+    });
+
+    (async () => {
+      await loadDevices();
+      await loadLast();
+      await loadConsumptionSeries();
+      await loadBatterySeries();
+      await loadByHourCharts();
+      await loadWeekdayChart();
+      await loadAnomalyChart();
+      await loadForecastChart();
+      await loadMonthlyChart();
+      await loadActiveWindowChart();
+      setupEvents();  // start live updates
+    })();
+  </script>
+</body>
+</html>

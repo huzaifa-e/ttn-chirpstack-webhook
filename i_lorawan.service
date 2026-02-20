@@ -1,0 +1,20 @@
+[Unit]
+Description=EMONI LoRaWAN webhook + charts
+After=network.target
+
+[Service]
+User=dev
+Group=dev
+WorkingDirectory=/opt/enny-cloud/emoni_lorawan
+EnvironmentFile=/opt/enny-cloud/emoni_lorawan/.env
+# confirm this path matches: `command -v npm`
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=2
+Environment=NODE_ENV=production
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

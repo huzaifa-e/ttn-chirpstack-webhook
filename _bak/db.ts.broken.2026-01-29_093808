@@ -1,0 +1,656 @@
+import Database from "better-sqlite3";
+import path from "node:path";
+
+const dbPath = path.join(process.cwd(), "data.db");
+const db = new Database(dbPath);
+db.pragma("journal_mode = WAL");
+
+// --- schema & migrations ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS readings (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    dev_eui           TEXT NOT NULL,
+    at                TEXT NOT NULL,              -- ISO timestamp (UTC)
+    meter_value       REAL NOT NULL,
+    meter_value_raw   TEXT,
+    device_name       TEXT,
+    application_id    TEXT,
+    application_name  TEXT,
+    deduplication_id  TEXT,
+    battery_mv        INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_readings_dev_at
+    ON readings (dev_eui, at);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_readings_dedup
+    ON readings (deduplication_id);
+`);
+
+function ensureColumn(name: string, ddl: string) {
+  const cols = db
+    .prepare(`PRAGMA table_info(readings)`)
+    .all() as { name: string }[];
+  if (!cols.find((c) => c.name === name)) {
+    db.exec(ddl);
+  }
+}
+
+// for existing DBs that don’t have the column yet
+ensureColumn("battery_mv", `ALTER TABLE readings ADD COLUMN battery_mv INTEGER;`);
+
+// --- types ---
+export interface StoreReadingInput {
+  dev_eui: string;
+  at: string; // ISO string
+  meter_value: number;
+  meter_value_raw: string | number | null;
+  device_name?: string;
+  application_id?: string;
+  application_name?: string;
+  deduplication_id?: string;
+  battery_mv?: number | null;
+}
+
+export interface ReadingRow {
+  id: number;
+  dev_eui: string;
+  at: string;
+  meter_value: number;
+  meter_value_raw: string | null;
+  device_name: string | null;
+  application_id: string | null;
+  application_name: string | null;
+  deduplication_id: string | null;
+  battery_mv: number | null;
+  rssi: number | null;
+  snr: number | null;
+}
+
+// --- prepared statements ---
+const stmtInsert = db.prepare(`
+  INSERT INTO readings (
+    dev_eui,
+    at,
+    meter_value,
+    meter_value_raw,
+    device_name,
+    application_id,
+    application_name,
+    deduplication_id,
+    battery_mv
+  )
+  VALUES (
+    @dev_eui,
+    @at,
+    @meter_value,
+    @meter_value_raw,
+    @device_name,
+    @application_id,
+    @application_name,
+    @deduplication_id,
+    @battery_mv
+  )
+`);
+
+const stmtListDevices = db.prepare(`
+  SELECT
+    dev_eui,
+    MAX(device_name) AS device_name
+  FROM readings
+  GROUP BY dev_eui
+  ORDER BY dev_eui ASC
+`);
+
+const stmtLastReading = db.prepare(`
+  SELECT *
+  FROM readings
+  WHERE dev_eui = ?
+  ORDER BY at DESC, id DESC
+  LIMIT 1
+`);
+
+const stmtAllReadingsForDevice = db.prepare(`
+  SELECT *
+  FROM readings
+  WHERE dev_eui = ?
+  ORDER BY at ASC, id ASC
+`);
+
+// --- public API basics ---
+
+export function storeReading(input: StoreReadingInput): void {
+  const {
+    dev_eui,
+    at,
+    meter_value,
+    meter_value_raw,
+    device_name,
+    application_id,
+    application_name,
+    deduplication_id,
+    battery_mv,
+    rssi,
+    snr,
+  } = input;
+
+  stmtInsert.run({
+    dev_eui,
+    at,
+    meter_value,
+    meter_value_raw: meter_value_raw != null ? String(meter_value_raw) : null,
+    device_name: (device_name == null ? null : device_name),
+    application_id: (application_id == null ? null : application_id),
+    application_name: (application_name == null ? null : application_name),
+    deduplication_id: (deduplication_id == null ? null : deduplication_id),
+    battery_mv: (typeof battery_mv === "number" && Number.isFinite(battery_mv) ? Math.round(battery_mv) : null),
+    rssi: (typeof rssi === "number" && Number.isFinite(rssi) ? rssi : null),
+    snr: (typeof snr === "number" && Number.isFinite(snr) ? snr : null),
+});
+}
+
+export function listDevices(): { dev_eui: string; device_name?: string | null }[] {
+  return stmtListDevices.all() as { dev_eui: string; device_name: string | null }[];
+}
+
+export function getLastReading(
+  devEui: string
+): { at: string; meter_value: number; battery_mv: number | null; rssi: number | null; snr: number | null } | null {
+  const row = stmtLastReading.get(devEui) as ReadingRow | undefined;
+  if (!row) return null;
+  return {
+    at: row.at,
+    meter_value: row.meter_value,
+    battery_mv: row.battery_mv,
+    rssi: (row.rssi == null ? null : row.rssi),
+    snr: (row.snr == null ? null : row.snr),
+  };
+}
+
+export function listReadings(
+  devEui: string,
+  from?: string,
+  to?: string
+): ReadingRow[] {
+  const all = stmtAllReadingsForDevice.all(devEui) as ReadingRow[];
+  return all.filter((r) => {
+    if (from && r.at < from) return false;
+    if (to && r.at > to) return false;
+    return true;
+  });
+}
+
+// count battery transmissions between timestamps, optionally per device
+export function countBatteryReadings(
+  devEui: string | null,
+  from: string,
+  to: string
+): number {
+  let sql = `
+    SELECT COUNT(*) AS cnt
+    FROM readings
+    WHERE 1=1
+      AND at >= @from
+      AND at <= @to
+  `;
+  const params: any = { from, to };
+  if (devEui) {
+    sql += ` AND dev_eui = @dev_eui`;
+    params.dev_eui = devEui;
+  }
+  const row = db.prepare(sql).get(params) as { cnt: number } | undefined;
+  return row && row.cnt != null ? row.cnt : 0;
+}
+
+// --- date helpers ---
+export interface DailyPoint {
+  date: string; // YYYY-MM-DD in local tz
+  consumption: number | null;
+  closing: number | null;
+}
+
+function getLocalDateString(iso: string, tz: string): string {
+  const d = new Date(iso);
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(d);
+  const year = parts.find((p) => p.type === "year")?.value ?? "0000";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
+  const day = parts.find((p) => p.type === "day")?.value ?? "01";
+  return `${year}-${month}-${day}`;
+}
+
+// local date + hour/weekday for habit analysis
+function getLocalParts(
+  iso: string,
+  tz: string
+): { date: string; weekdayLabel: string; hour: number } {
+  const d = new Date(iso);
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(d);
+  const year = parts.find((p) => p.type === "year")?.value ?? "0000";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
+  const day = parts.find((p) => p.type === "day")?.value ?? "01";
+  const weekdayLabel = parts.find((p) => p.type === "weekday")?.value ?? "";
+  const hourStr = parts.find((p) => p.type === "hour")?.value ?? "00";
+  const hour = Number(hourStr);
+  return {
+    date: `${year}-${month}-${day}`,
+    weekdayLabel,
+    hour: Number.isFinite(hour) ? hour : 0,
+  };
+}
+
+// --- daily consumption (already used by UI) ---
+
+export function dailyConsumption(
+  devEui: string,
+  days: number,
+  tz: string,
+  end?: string
+): DailyPoint[] {
+  const all = stmtAllReadingsForDevice.all(devEui) as ReadingRow[];
+  if (!all.length || days <= 0) return [];
+
+  const endDate = end ? new Date(end) : new Date();
+  const endLocal = getLocalDateString(endDate.toISOString(), tz);
+
+  const [y, m, d] = endLocal.split("-").map((x) => Number(x));
+  const endLocalDateObj = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  const startLocalDateObj = new Date(
+    endLocalDateObj.getTime() - (days - 1) * 86400000
+  );
+  const startLocal = getLocalDateString(startLocalDateObj.toISOString(), tz);
+
+  const byDate: Record<string, { readings: ReadingRow[] }> = {};
+
+  for (const r of all) {
+    const dateStr = getLocalDateString(r.at, tz);
+    if (dateStr < startLocal || dateStr > endLocal) continue;
+    if (!byDate[dateStr]) byDate[dateStr] = { readings: [] };
+    byDate[dateStr].readings.push(r);
+  }
+
+  const dates = Object.keys(byDate).sort();
+  if (!dates.length) return [];
+
+  const result: DailyPoint[] = [];
+  let prevClosing: number | null = null;
+
+  for (const date of dates) {
+    const bucket = byDate[date];
+    bucket.readings.sort((a, b) =>
+      a.at < b.at ? -1 : a.at > b.at ? 1 : a.id - b.id
+    );
+
+    const last = bucket.readings[bucket.readings.length - 1];
+    const closing = last ? last.meter_value : null;
+
+    let consumption: number | null = null;
+    if (closing != null && prevClosing != null) {
+      const delta = closing - prevClosing;
+      consumption = delta >= 0 ? delta : 0;
+    }
+    prevClosing = (closing == null ? prevClosing : closing);
+
+    result.push({
+      date,
+      consumption,
+      closing,
+    });
+  }
+
+  return result;
+}
+
+// --- habit analytics: by hour of day ---
+
+export function consumptionByHour(
+  devEui: string,
+  days: number,
+  tz: string
+): {
+  buckets4: { label: string; kwh: number }[];
+  hours24: { hour: number; kwh: number }[];
+} {
+  const all = stmtAllReadingsForDevice.all(devEui) as ReadingRow[];
+  if (all.length < 2 || days <= 0) {
+    return { buckets4: [], hours24: [] };
+  }
+
+  const cutoffIso = new Date(Date.now() - days * 86400000).toISOString();
+
+  const fourBuckets: Record<string, number> = {
+    "00–06": 0,
+    "06–12": 0,
+    "12–18": 0,
+    "18–24": 0,
+  };
+  const hours24 = new Array(24).fill(0) as number[];
+
+  for (let i = 1; i < all.length; i++) {
+    const prev = all[i - 1];
+    const curr = all[i];
+
+    if (prev.at < cutoffIso) continue;
+
+    const delta = curr.meter_value - prev.meter_value;
+    if (!Number.isFinite(delta) || delta <= 0) continue;
+
+    const lp = getLocalParts(prev.at, tz);
+    const h = lp.hour;
+    if (h < 0 || h > 23) continue;
+
+    hours24[h] += delta;
+
+    if (h < 6) fourBuckets["00–06"] += delta;
+    else if (h < 12) fourBuckets["06–12"] += delta;
+    else if (h < 18) fourBuckets["12–18"] += delta;
+    else fourBuckets["18–24"] += delta;
+  }
+
+  return {
+    buckets4: Object.entries(fourBuckets).map(([label, kwh]) => ({
+      label,
+      kwh,
+    })),
+    hours24: hours24.map((kwh, hour) => ({ hour, kwh })),
+  };
+}
+
+// --- habit analytics: by weekday ---
+
+export function consumptionByWeekday(
+  devEui: string,
+  days: number,
+  tz: string
+): { label: string; kwh: number }[] {
+  const all = stmtAllReadingsForDevice.all(devEui) as ReadingRow[];
+  if (all.length < 2 || days <= 0) return [];
+
+  const cutoffIso = new Date(Date.now() - days * 86400000).toISOString();
+
+  const buckets: Record<string, number> = {};
+
+  for (let i = 1; i < all.length; i++) {
+    const prev = all[i - 1];
+    const curr = all[i];
+
+    if (prev.at < cutoffIso) continue;
+
+    const delta = curr.meter_value - prev.meter_value;
+    if (!Number.isFinite(delta) || delta <= 0) continue;
+
+    const lp = getLocalParts(prev.at, tz);
+    const label = lp.weekdayLabel || "Day";
+    buckets[label] = (buckets[label] || 0) + delta;
+  }
+
+  const weekdayOrder = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  return Object.entries(buckets)
+    .sort((a, b) => {
+      const ia = weekdayOrder.indexOf(a[0]);
+      const ib = weekdayOrder.indexOf(b[0]);
+      if (ia === -1 && ib === -1) return a[0].localeCompare(b[0]);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    })
+    .map(([label, kwh]) => ({ label, kwh }));
+}
+
+// --- anomaly detection on daily consumption ---
+
+export function dailyAnomalies(
+  devEui: string,
+  days: number,
+  tz: string
+): {
+  date: string;
+  consumption: number | null;
+  closing: number | null;
+  z: number | null;
+  anomaly: "high" | "low" | null;
+}[] {
+  const series = dailyConsumption(devEui, days, tz);
+  if (!series.length) return [];
+
+  const values = series
+    .map((s) => s.consumption)
+    .filter((v): v is number => v != null && v > 0);
+
+  if (values.length < 2) {
+    return series.map((s) => ({
+      ...s,
+      z: null,
+      anomaly: null,
+    }));
+  }
+
+  const n = values.length;
+  const mean = values.reduce((a, b) => a + b, 0) / n;
+  const variance =
+    values.reduce((a, b) => a + (b - mean) * (b - mean), 0) / (n - 1);
+  const std = Math.sqrt(variance);
+
+  if (!Number.isFinite(std) || std === 0) {
+    return series.map((s) => ({
+      ...s,
+      z: null,
+      anomaly: null,
+    }));
+  }
+
+  return series.map((s) => {
+    if (s.consumption == null) {
+      return { ...s, z: null, anomaly: null };
+    }
+    const z = (s.consumption - mean) / std;
+    let anomaly: "high" | "low" | null = null;
+    if (z >= 2) anomaly = "high";
+    else if (z <= -2) anomaly = "low";
+    return { ...s, z, anomaly };
+  });
+}
+
+// --- simple forecast for coming days + monthly projection ---
+
+export function forecastConsumption(
+  devEui: string,
+  daysPast: number,
+  daysFuture: number,
+  tz: string
+): {
+  history: { date: string; consumption: number | null }[];
+  forecast: { date: string; pred: number }[];
+  monthly_projection: { month: string; current_kwh: number; projected_kwh: number } | null;
+} {
+  const history = dailyConsumption(devEui, daysPast, tz);
+
+  const clean = history
+    .map((s, idx) => ({
+      idx,
+      date: s.date,
+      consumption: s.consumption,
+    }))
+    .filter((s) => s.consumption != null && s.consumption >= 0) as {
+    idx: number;
+    date: string;
+    consumption: number;
+  }[];
+
+  const n = clean.length;
+  if (n === 0) {
+    return { history, forecast: [], monthly_projection: null };
+  }
+
+  // linear regression on index vs consumption
+  let slope = 0;
+  let intercept = clean[0].consumption;
+
+  if (n >= 2) {
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumX2 = 0;
+    for (const p of clean) {
+      const x = p.idx;
+      const y = p.consumption;
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumX2 += x * x;
+    }
+    const denom = n * sumX2 - sumX * sumX;
+    if (denom !== 0) {
+      slope = (n * sumXY - sumX * sumY) / denom;
+      intercept = (sumY - slope * sumX) / n;
+    } else {
+      slope = 0;
+      intercept = sumY / n;
+    }
+  }
+
+  const historyDates = history.map((h) => h.date);
+  const lastDateStr = historyDates[historyDates.length - 1];
+  const [ly, lm, ld] = lastDateStr.split("-").map((x) => Number(x));
+  let lastDate = new Date(Date.UTC(ly, lm - 1, ld, 0, 0, 0));
+
+  const forecast: { date: string; pred: number }[] = [];
+  const startIdx = history.length;
+
+  for (let k = 0; k < daysFuture; k++) {
+    const x = startIdx + k;
+    const y = Math.max(0, slope * x + intercept);
+    lastDate = new Date(lastDate.getTime() + 86400000);
+    const yUTC = lastDate.getUTCFullYear();
+    const mUTC = (lastDate.getUTCMonth() + 1).toString().padStart(2, "0");
+    const dUTC = lastDate.getUTCDate().toString().padStart(2, "0");
+    const dateStr = `${yUTC}-${mUTC}-${dUTC}`;
+    forecast.push({ date: dateStr, pred: y });
+  }
+
+  // monthly projection based on current month in tz
+  const now = new Date();
+  const fmtMonth = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const partsNow = fmtMonth.formatToParts(now);
+  const yearNow = partsNow.find((p) => p.type === "year")?.value ?? "0000";
+  const monthNow = partsNow.find((p) => p.type === "month")?.value ?? "01";
+  const dayNow = Number(partsNow.find((p) => p.type === "day")?.value ?? "01");
+  const monthKey = `${yearNow}-${monthNow}`;
+
+  let currentMonthKwh = 0;
+  for (const d of history) {
+    if (d.consumption == null) continue;
+    if (d.date.startsWith(monthKey)) {
+      currentMonthKwh += d.consumption;
+    }
+  }
+
+  const daysInMonth = new Date(
+    Number(yearNow),
+    Number(monthNow),
+    0
+  ).getDate();
+  const avgPerDay =
+    dayNow > 0 ? currentMonthKwh / Math.min(dayNow, daysInMonth) : 0;
+  const projected = avgPerDay * daysInMonth;
+
+  const monthly_projection =
+    currentMonthKwh > 0
+      ? {
+          month: monthKey,
+          current_kwh: currentMonthKwh,
+          projected_kwh: projected,
+        }
+      : null;
+
+  return { history, forecast, monthly_projection };
+}
+
+// --- monthly totals ---
+
+export function monthlyConsumption(
+  devEui: string,
+  months: number,
+  tz: string
+): { month: string; kwh: number }[] {
+  const days = Math.max(months * 35, 30);
+  const series = dailyConsumption(devEui, days, tz);
+  if (!series.length) return [];
+
+  const buckets: Record<string, number> = {};
+  for (const d of series) {
+    if (d.consumption == null) continue;
+    const monthKey = d.date.slice(0, 7); // YYYY-MM
+    buckets[monthKey] = (buckets[monthKey] || 0) + d.consumption;
+  }
+
+  const keys = Object.keys(buckets).sort();
+  const selected = keys.slice(Math.max(0, keys.length - months));
+
+  return selected.map((m) => ({ month: m, kwh: buckets[m] }));
+}
+
+// --- active usage window per day (first/last activity) ---
+
+export function activeWindow(
+  devEui: string,
+  days: number,
+  tz: string
+): { date: string; start_minutes: number | null; end_minutes: number | null }[] {
+  const all = stmtAllReadingsForDevice.all(devEui) as ReadingRow[];
+  if (all.length < 2 || days <= 0) return [];
+
+  const cutoffIso = new Date(Date.now() - days * 86400000).toISOString();
+  const dayMap: Record<
+    string,
+    { start: number | null; end: number | null }
+  > = {};
+
+  for (let i = 1; i < all.length; i++) {
+    const prev = all[i - 1];
+    const curr = all[i];
+
+    if (prev.at < cutoffIso) continue;
+
+    const delta = curr.meter_value - prev.meter_value;
+    if (!Number.isFinite(delta) || delta <= 0) continue;
+
+    const lp = getLocalParts(prev.at, tz);
+    const date = lp.date;
+    const minutes = lp.hour * 60; // hour resolution is enough here
+
+    let entry = dayMap[date];
+    if (!entry) {
+      entry = { start: null, end: null };
+      dayMap[date] = entry;
+    }
+    if (entry.start === null || minutes < entry.start) entry.start = minutes;
+    if (entry.end === null || minutes > entry.end) entry.end = minutes;
+  }
+
+  return Object.keys(dayMap)
+    .sort()
+    .map((date) => ({
+      date,
+      start_minutes: dayMap[date].start,
+      end_minutes: dayMap[date].end,
+    }));
+}

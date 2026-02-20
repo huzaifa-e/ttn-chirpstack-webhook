@@ -1,0 +1,32 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: emoni-lorawan:latest
+    container_name: emoni-lorawan
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+      - DB_PATH=/app/data/data.db
+      - CHIRPSTACK_WEBHOOK_TOKEN=${CHIRPSTACK_WEBHOOK_TOKEN:-}
+      - UI_TIMEZONE=${UI_TIMEZONE:-Europe/Berlin}
+      - UI_DAYS=${UI_DAYS:-30}
+    volumes:
+      - emoni_data:/app/data
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: emoni-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+
+volumes:
+  emoni_data:

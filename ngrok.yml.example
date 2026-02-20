@@ -1,0 +1,10 @@
+version: "2"
+authtoken: YOUR_NGROK_AUTHTOKEN
+
+# For a fixed domain, reserve one in ngrok dashboard and set it below.
+# If you remove "domain", ngrok will assign a random URL each start.
+tunnels:
+  emoni:
+    proto: http
+    addr: app:8000
+    domain: ttn-webhook.isis-ic.com

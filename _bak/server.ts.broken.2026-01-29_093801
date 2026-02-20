@@ -1,0 +1,252 @@
+import express, { Request, Response } from "express";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  storeReading,
+  listDevices,
+  dailyConsumption,
+  listReadings,
+  getLastReading,
+} from "./db.js";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(express.json({ limit: "2mb" }));
+
+// ---- simple request logger ----
+app.use((req, _res, next) => {
+  if (req.path !== "/healthz") {
+    const ip =
+      (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress;
+    console.log(
+      `[HIT] ${req.method} ${req.url} ip=${ip} ua=${req.headers["user-agent"] || "-"}`
+    );
+  }
+  next();
+});
+
+// ---- ENV defaults ----
+const EXPECTED_TOKEN = process.env.CHIRPSTACK_WEBHOOK_TOKEN || "";
+const PORT = Number(process.env.PORT || 8000);
+const DEFAULT_TZ = process.env.UI_TIMEZONE || "Europe/Berlin";
+const DEFAULT_DAYS = Number(process.env.UI_DAYS || "30");
+
+// ---- helpers ----
+const HEX16 = /^[0-9a-fA-F]{16}$/;
+
+function numOrNull(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function normalizeDevEui(v: unknown): { hex?: string; base64?: string } {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (!s) return {};
+  if (HEX16.test(s)) return { hex: s.toLowerCase() };
+  try {
+    const buf = Buffer.from(s, "base64");
+    if (buf.length === 8) return { hex: buf.toString("hex"), base64: s };
+  } catch {}
+  return { hex: s.toLowerCase() };
+}
+
+// ---- SSE (optional) ----
+const sseClients = new Set<Response>();
+function sseSend(obj: any) {
+  const msg = `data: ${JSON.stringify(obj)}\n\n`;
+  for (const res of sseClients) res.write(msg);
+}
+app.get("/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  res.write("retry: 2000\n\n");
+  sseClients.add(res);
+  req.on("close", () => sseClients.delete(res));
+});
+
+// keep a few recent events in memory
+const lastEvents: any[] = [];
+function pushEvent(e: any) {
+  lastEvents.push({ ts: new Date().toISOString(), ...e });
+  if (lastEvents.length > 50) lastEvents.shift();
+  sseSend({ type: "update", ...e });
+}
+
+// ---- webhook (ChirpStack → us) ----
+app.post("/webhooks/chirpstack", async (req: Request, res: Response) => {
+  if ((req.get("X-API-Key") || "") !== EXPECTED_TOKEN) {
+    console.warn("[WARN] Unauthorized POST to /webhooks/chirpstack");
+    return res.status(401).send("unauthorized");
+  }
+
+  const event = String(req.query.event || "");
+  const up: any = req.body || {};
+  console.log(
+    `[RECV] event=${event || "(none)"} keys=${Object.keys(up)} length=${JSON.stringify(up).length}`
+  );
+
+  // identify device (v4 & v3 tolerant)
+  const devEuiRaw =
+    up?.deviceInfo?.devEui ?? up?.devEui ?? up?.devEUI ?? up?.deviceEui ?? null;
+  const { hex: devEui, base64: devEuiB64 } = normalizeDevEui(devEuiRaw);
+
+  const deviceName: string | undefined =
+    up?.deviceInfo?.deviceName ?? up?.deviceName;
+  const applicationId: string | undefined =
+    up?.deviceInfo?.applicationId ?? up?.applicationId;
+  const applicationName: string | undefined =
+    up?.deviceInfo?.applicationName ?? up?.applicationName;
+
+  const at: string = up?.time || up?.publishedAt || new Date().toISOString();
+  const deduplicationId: string | undefined = up?.deduplicationId;
+
+  // --- radio metrics (best gateway) ---
+  const rxArr = Array.isArray(up?.rxInfo) ? up.rxInfo : [];
+  let rssi: number | null = null;
+  let snr: number | null = null;
+  if (rxArr.length) {
+    const best = rxArr.reduce((a: any, b: any) => {
+      const ar = numOrNull(a?.rssi) ?? -9999;
+      const br = numOrNull(b?.rssi) ?? -9999;
+      return br > ar ? b : a;
+    });
+    rssi = numOrNull(best?.rssi);
+    snr = numOrNull(best?.loRaSNR ?? best?.loraSNR ?? best?.snr);
+  }
+
+  // extract object payload (v4: object / v3: objectJSON)
+  let obj: any = up?.object ?? null;
+  if (!obj && typeof up?.objectJSON === "string") {
+    try {
+      obj = JSON.parse(up.objectJSON);
+    } catch {}
+  }
+
+  // meter value raw: prefer decoded fields, fallback to base64 "data"
+  let raw: unknown =
+    obj?.meterValue ?? obj?.message ?? up?.object?.meterValue ?? up?.object?.message ?? up?.message ?? null;
+
+  if (raw == null && typeof up?.data === "string") {
+    try {
+      const ascii = Buffer.from(up.data, "base64").toString("utf8");
+      raw = ascii.replace(/^(\d{5})(\d+)/, "$1,$2"); // "1184690" -> "11846,90"
+    } catch (e) {
+      console.warn("[WARN] base64 decode failed for 'data':", e);
+    }
+  }
+
+  // battery (mV): allow multiple shapes
+  const battery_mv: number | null =
+    numOrNull(obj?.battery_mv) ??
+    numOrNull(up?.battery_mv) ??
+    null;
+
+  let meterValue: number | null = null;
+  let meterValueRaw: string | number | null = null;
+
+  if (typeof raw === "string") {
+    meterValueRaw = raw;
+    const n = Number(raw.replace(",", "."));
+    meterValue = Number.isFinite(n) ? n : null;
+  } else if (typeof raw === "number") {
+    meterValueRaw = raw;
+    meterValue = Number.isFinite(raw) ? raw : null;
+  }
+
+  console.log(
+    `[RECV] devEui=${devEui ?? devEuiB64 ?? "(missing)"} meter=${meterValue ?? "(null)"} batt=${battery_mv ?? "(null)"}mV rssi=${rssi ?? "(null)"} snr=${snr ?? "(null)"} at=${at} dedup=${deduplicationId || "-"}`
+  );
+
+  if (!devEui || meterValue == null) {
+    console.warn("[WARN] Missing devEui or meterValue; not storing this event.");
+    pushEvent({
+      type: "up-missing",
+      devEui: devEui ?? devEuiB64,
+      meterValue,
+      at,
+      reason: "missing devEui or meterValue",
+    });
+    return res.status(200).send("ok");
+  }
+
+  try {
+    storeReading({
+      dev_eui: devEui,
+      at,
+      meter_value: meterValue,
+      meter_value_raw: meterValueRaw,
+      device_name: deviceName,
+      application_id: applicationId,
+      application_name: applicationName,
+      deduplication_id: deduplicationId,
+      battery_mv,
+      rssi,
+      snr,
+    });
+    pushEvent({ type: "up", devEui, meterValue, battery_mv, rssi, snr, at });
+    console.log(`[STORE] devEui=${devEui} meter=${meterValue} batt=${battery_mv ?? "(null)"}mV at=${at}`);
+  } catch (e) {
+    console.error("[ERROR] storeReading failed:", e);
+  }
+
+  return res.status(200).send("ok");
+});
+
+// ---- debug ----
+app.get("/debug/last", (_req, res) => res.json({ lastEvents }));
+
+// ---- REST API for UI ----
+app.get("/api/devices", (_req, res) => {
+  res.json({ devices: listDevices() });
+});
+
+app.get("/api/readings", (req, res) => {
+  const devEui = String(req.query.devEui || "");
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const from = req.query.from ? String(req.query.from) : undefined;
+  const to = req.query.to ? String(req.query.to) : undefined;
+  res.json({ devEui, readings: listReadings(devEui, from, to) });
+});
+
+app.get("/api/consumption/daily", (req, res) => {
+  const devEui = String(req.query.devEui || "");
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const days = req.query.days ? Number(req.query.days) : DEFAULT_DAYS;
+  const tz = req.query.tz ? String(req.query.tz) : DEFAULT_TZ;
+  const end = req.query.end ? String(req.query.end) : undefined;
+  res.json({ devEui, days, tz, series: dailyConsumption(devEui, days, tz, end) });
+});
+
+app.get("/api/last-reading", (req, res) => {
+  const devEui = String(req.query.devEui || "");
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const last = getLastReading(devEui);
+  res.json({ devEui, last });
+});
+
+// ---- static frontend + vendors ----
+app.use(
+  "/vendor/apexcharts",
+  express.static(path.join(__dirname, "..", "node_modules", "apexcharts", "dist"))
+);
+app.use("/", express.static(path.join(__dirname, "..", "public")));
+
+// ---- health ----
+app.get("/healthz", (_req, res) => res.status(200).send("ok"));
+
+// ---- start ----
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Webhook + UI listening on http://0.0.0.0:${PORT}`);
+});

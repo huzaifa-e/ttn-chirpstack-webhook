@@ -1,0 +1,29 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.ngrok.example
+
+# TLS / private keys
+*.key
+*.pem
+*.p12
+*.pfx
+nginx/ssl/*
+!nginx/ssl/README.txt
+
+# Local databases / runtime data
+*.db
+*.db-shm
+*.db-wal
+
+# Dependency / build artifacts
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Backups and local editor files
+_bak/
+.DS_Store
