@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>EMONI – Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
+    h1 { margin-bottom: 6px; }
+    h2 { margin-top: 26px; margin-bottom: 8px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    label { font-weight:600; }
+    select, input, button { padding:6px 8px; }
+    #status { margin:8px 0; color:#666; }
+    #last { margin:6px 0; font-size:14px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 18px; max-width: 1200px; }
+    .card { border: 1px solid #e5e5e5; border-radius: 10px; padding: 14px; }
+    .muted { color:#666; font-size: 13px; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px; max-height: 240px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>EMONI – Dashboard</h1>
+
+  <div class="row">
+    <label>Device:</label>
+    <select id="devSel"></select>
+
+    <label>Tage:</label>
+    <input id="days" type="number" min="1" max="365" value="30" />
+
+    <label>TZ:</label>
+    <input id="tz" type="text" value="Europe/Berlin" size="16" />
+
+    <button id="refresh">Aktualisieren</button>
+    <button id="downloadJson">Download JSON</button>
+    <button id="downloadCsv">Download CSV</button>
+    <button id="deleteDevice" style="background:#ffe3e3;border:1px solid #ff8787;">Gerät löschen</button>
+  </div>
+
+  <div class="row" style="margin-top:10px;">
+    <label>Zeitraum:</label>
+    <input id="fromDt" type="datetime-local" />
+    <input id="toDt" type="datetime-local" />
+    <button id="setNow">Now</button>
+    <label>Quelle:</label>
+    <select id="deleteSource">
+      <option value="both">beide</option>
+      <option value="readings">readings</option>
+      <option value="uplinks">uplinks</option>
+    </select>
+    <button id="countTx">Uploads zählen</button>
+    <button id="deleteRange" style="background:#fff5f5;border:1px solid #ffa8a8;">Range löschen</button>
+    <label>Punkt:</label>
+    <input id="pointDt" type="datetime-local" />
+    <button id="deletePoint" style="background:#fff5f5;border:1px solid #ffa8a8;">Punkt löschen</button>
+    <div id="txOut" class="muted"></div>
+  </div>
+
+  <div id="status"></div>
+  <div id="last">Letzter Zählerstand: —</div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Tagesverbrauch</h2>
+      <div id="chartDaily"></div>
+      <div class="muted">Balken = Tagesverbrauch, Linie = Zählerstand (Tagesschluss)</div>
+    </div>
+
+    <div class="card">
+      <h2>Batteriespannung über Zeit (mV) + Zählerstand</h2>
+      <div id="chartBattery"></div>
+      <div class="muted">Zoom: Bereich markieren (X-Achse). Tooltip zeigt Batterie + Zähler.</div>
+    </div>
+
+    <div class="card">
+      <h2>RSSI über Zeit</h2>
+      <div id="chartRssi"></div>
+      <div class="muted">Tooltip zeigt RSSI, SNR und Zähler für denselben Punkt.</div>
+    </div>
+
+    <div class="card">
+      <h2>Payload Explorer (3rd-party Geräte)</h2>
+      <div class="row" style="margin-bottom:10px;">
+        <label>Numerisches Feld:</label>
+        <select id="fieldSel"></select>
+      </div>
+      <div id="chartField"></div>
+      <div class="muted" id="payloadMeta">Letzter Uplink Payload:</div>
+      <pre id="payloadJson">—</pre>
+    </div>
+
+    <div class="card">
+      <h2>IMU Position (ax / ay / az)</h2>
+      <div id="chartImu"></div>
+      <div class="muted">Nutzt erkannte Felder wie ax/ay/az (auch verschachtelt, z. B. imu.ax).</div>
+    </div>
+  </div>
+
+  <script src="/vendor/apexcharts/apexcharts.min.js"></script>
+  <script>
+    const devSel = document.getElementById('devSel');
+    const daysEl = document.getElementById('days');
+    const tzEl = document.getElementById('tz');
+    const statusEl = document.getElementById('status');
+    const lastEl = document.getElementById('last');
+
+    const fromDt = document.getElementById('fromDt');
+    const toDt = document.getElementById('toDt');
+    const pointDt = document.getElementById('pointDt');
+    const setNowBtn = document.getElementById('setNow');
+    const deleteSource = document.getElementById('deleteSource');
+    const txOut = document.getElementById('txOut');
+    const fieldSel = document.getElementById('fieldSel');
+    const payloadMeta = document.getElementById('payloadMeta');
+    const payloadJson = document.getElementById('payloadJson');
+    const downloadJsonBtn = document.getElementById('downloadJson');
+    const downloadCsvBtn = document.getElementById('downloadCsv');
+    const deleteDeviceBtn = document.getElementById('deleteDevice');
+
+    let chartDaily;
+    let chartBattery;
+    let chartRssi;
+    let chartField;
+    let chartImu;
+
+    const isDesktop = () => window.innerWidth > 800;
+
+    function toIsoFromLocalDatetime(localVal) {
+      if (!localVal) return '';
+      // datetime-local has no TZ; interpret as local browser TZ and convert to ISO
+      const d = new Date(localVal);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString();
+    }
+
+    function setDefaultRangeHours(hoursBack) {
+      const now = new Date();
+      const from = new Date(now.getTime() - hoursBack*3600*1000);
+      // Format for datetime-local: YYYY-MM-DDTHH:MM
+      const f = (d) => {
+        const pad = (n) => String(n).padStart(2,'0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+      fromDt.value = f(from);
+      toDt.value = f(now);
+      pointDt.value = f(now);
+    }
+
+    function setNowDateInputs() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const f = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      toDt.value = f(now);
+      pointDt.value = f(now);
+    }
+
+    async function loadDevices() {
+      const j = await (await fetch('/api/devices')).json();
+      devSel.innerHTML = '';
+      (j.devices || []).forEach(d => {
+        const o = document.createElement('option');
+        o.value = d.dev_eui;
+        o.textContent = d.device_name ? `${d.dev_eui} — ${d.device_name}` : d.dev_eui;
+        devSel.appendChild(o);
+      });
+      statusEl.textContent = devSel.value ? '' : 'Noch keine Geräte — warte auf Uplinks.';
+    }
+
+    async function loadLast() {
+      const devEui = devSel.value;
+      if (!devEui) { lastEl.textContent = 'Letzter Zählerstand: —'; return; }
+      const j = await (await fetch(`/api/last-reading?devEui=${encodeURIComponent(devEui)}`)).json();
+      if (!j.last) {
+        const ju = await (await fetch(`/api/last-uplink?devEui=${encodeURIComponent(devEui)}`)).json();
+        if (!ju.last) {
+          lastEl.textContent = 'Letzter Zählerstand: —';
+          return;
+        }
+        const at = new Date(ju.last.at);
+        const batt = ju.last.battery_mv != null ? ` | Batterie ${ju.last.battery_mv} mV` : '';
+        const rssi = ju.last.rssi != null ? ` | RSSI ${ju.last.rssi} dBm` : '';
+        const snr = ju.last.snr != null ? ` | SNR ${Number(ju.last.snr).toFixed(1)} dB` : '';
+        lastEl.textContent = `Letzter Uplink (ohne Zählerwert) @ ${at.toLocaleString('de-DE')}${batt}${rssi}${snr}`;
+        return;
+      }
+      const at = new Date(j.last.at);
+      const batt = j.last.battery_mv != null ? ` | Batterie ${j.last.battery_mv} mV` : '';
+      const rssi = j.last.rssi != null ? ` | RSSI ${j.last.rssi} dBm` : '';
+      const snr = j.last.snr != null ? ` | SNR ${Number(j.last.snr).toFixed(1)} dB` : '';
+      lastEl.textContent = `Letzter Zählerstand: ${Number(j.last.meter_value).toFixed(2).replace('.', ',')} @ ${at.toLocaleString('de-DE')}${batt}${rssi}${snr}`;
+    }
+
+    function buildDailyOptions(labels, cons, closing, unitLabel) {
+      const maxBar = Math.ceil(Math.max(0, ...cons.map(v => v || 0)));
+
+      const formatDailyDate = (raw) => {
+        let value = raw;
+
+        // ApexCharts may pass category index instead of the category label.
+        if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw < labels.length) {
+          value = labels[raw];
+        }
+
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value ?? '—');
+        return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+      };
+
+      return {
+        chart: {
+          height: 360,
+          stacked: false,
+          animations: { enabled: isDesktop() },
+          toolbar: { show: false },
+          zoom: { enabled: false }
+        },
+        series: [
+          { name: 'Verbrauch', type: 'bar', data: cons },
+          { name: 'Zählerstand', type: 'line', data: closing },
+        ],
+        stroke: { width: [0, 2], curve: 'smooth' },
+        dataLabels: { enabled: false },
+        plotOptions: { bar: { endingShape: 'rounded', borderRadius: 2 } },
+        xaxis: {
+          type: 'category',
+          categories: labels,
+          labels: {
+            formatter: (val) => {
+              const d = new Date(val);
+              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+            }
+          }
+        },
+        yaxis: [
+          {
+            title: { text: `${unitLabel} pro Tag` },
+            max: maxBar > 0 ? maxBar : undefined,
+            labels: { formatter: v => Number(v || 0).toFixed(2).replace('.', ',') }
+          },
+          {
+            opposite: true,
+            title: { text: 'Zählerstand' },
+            labels: { formatter: v => Number(v || 0).toFixed(2).replace('.', ',') }
+          }
+        ],
+        tooltip: {
+          shared: true,
+          intersect: false,
+          x: { formatter: (val) => formatDailyDate(val) },
+          y: { formatter: (v) => (v == null ? '—' : Number(v).toFixed(2).replace('.', ',')) }
+        },
+        legend: { show: true }
+      };
+    }
+
+    async function loadDailySeries() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const days = Number(daysEl.value || 30);
+      const tz = tzEl.value || 'Europe/Berlin';
+
+      const j = await (await fetch(`/api/consumption/daily?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+
+      const labels = (j.series || []).map(x => x.date);
+      const cons = (j.series || []).map(x => (x.consumption == null ? 0 : x.consumption));
+      const closing = (j.series || []).map(x => (x.closing == null ? null : x.closing));
+
+      const options = buildDailyOptions(labels, cons, closing, 'm³');
+
+      if (chartDaily) {
+        chartDaily.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
+      } else {
+        chartDaily = new ApexCharts(document.querySelector("#chartDaily"), options);
+        chartDaily.render();
+      }
+    }
+
+    async function fetchReadingsWindow(devEui, days) {
+      const resp = await fetch(`/api/readings?devEui=${encodeURIComponent(devEui)}`);
+      const j = await resp.json();
+      let readings = j.readings || [];
+
+      const now = Date.now();
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
+      readings = readings.filter(r => new Date(r.at).getTime() >= cutoff);
+      return readings;
+    }
+
+    async function fetchUplinksWindow(devEui, days) {
+      const resp = await fetch(`/api/uplinks?devEui=${encodeURIComponent(devEui)}&limit=2000`);
+      const j = await resp.json();
+      let uplinks = j.uplinks || [];
+
+      const now = Date.now();
+      const cutoff = now - days * 24 * 60 * 60 * 1000;
+      uplinks = uplinks.filter(r => new Date(r.at).getTime() >= cutoff);
+      return uplinks;
+    }
+
+    async function loadBatterySeries() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const days = Number(daysEl.value || 30);
+      const uplinks = await fetchUplinksWindow(devEui, days);
+      if (!uplinks.length) return;
+
+      const labels = uplinks.map(r => r.at);
+      const batt = uplinks.map(r => (r.battery_mv != null ? r.battery_mv : null));
+      const meter = uplinks.map(r => (r.meter_value != null ? r.meter_value : null));
+      const hasMeter = meter.some(v => v != null);
+
+      const series = [{ name: 'Batterie (mV)', type: 'line', data: batt }];
+      if (hasMeter) {
+        series.push({ name: 'Zählerstand', type: 'line', data: meter });
+      }
+
+      const options = {
+        chart: {
+          height: 320,
+          animations: { enabled: isDesktop() },
+          toolbar: { show: true },
+          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
+        },
+        series,
+        xaxis: { type: 'datetime', categories: labels },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        yaxis: [
+          { title: { text: 'mV' }, labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) } },
+          { opposite: true, show: hasMeter, title: { text: 'Zählerstand' }, labels: { formatter: v => (v == null ? '—' : Number(v).toFixed(2).replace('.', ',')) } }
+        ],
+        tooltip: {
+          shared: true,
+          intersect: false,
+          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+          y: {
+            formatter: (val, opts) => {
+              const sIdx = opts.seriesIndex;
+              const idx = opts.dataPointIndex;
+              const mv = uplinks[idx] && uplinks[idx].meter_value != null ? uplinks[idx].meter_value : null;
+              if (sIdx === 0) {
+                const left = val == null ? '—' : `${Math.round(val)} mV`;
+                const m = mv == null ? '' : ` | Zähler ${Number(mv).toFixed(2).replace('.', ',')}`;
+                return left + m;
+              }
+              return val == null ? '—' : Number(val).toFixed(2).replace('.', ',');
+            }
+          }
+        },
+        legend: { show: true }
+      };
+
+      if (chartBattery) {
+        chartBattery.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
+      } else {
+        chartBattery = new ApexCharts(document.querySelector("#chartBattery"), options);
+        chartBattery.render();
+      }
+    }
+
+    async function loadRssiSeries() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const days = Number(daysEl.value || 30);
+      const uplinks = await fetchUplinksWindow(devEui, days);
+      if (!uplinks.length) return;
+
+      const labels = uplinks.map(r => r.at);
+      const rssiValues = uplinks.map(r => (r.rssi != null ? r.rssi : null));
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 260,
+          animations: { enabled: isDesktop() },
+          toolbar: { show: true },
+          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
+        },
+        series: [{ name: 'RSSI (dBm)', data: rssiValues }],
+        xaxis: { type: 'datetime', categories: labels },
+        yaxis: {
+          title: { text: 'RSSI (dBm)' },
+          labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) }
+        },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: false,
+          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+          y: {
+            formatter: (val, opts) => {
+              const idx = opts.dataPointIndex;
+              const mv = uplinks[idx] && uplinks[idx].meter_value != null ? uplinks[idx].meter_value : null;
+              const snr = uplinks[idx] && uplinks[idx].snr != null ? uplinks[idx].snr : null;
+
+              const parts = [];
+              parts.push(val == null ? '—' : `${Math.round(val)} dBm`);
+              if (snr != null) parts.push(`SNR ${Number(snr).toFixed(1)} dB`);
+              if (mv != null) parts.push(`Zähler ${Number(mv).toFixed(2).replace('.', ',')}`);
+              return parts.join(' | ');
+            }
+          }
+        },
+        legend: { show: true }
+      };
+
+      if (chartRssi) {
+        chartRssi.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
+      } else {
+        chartRssi = new ApexCharts(document.querySelector("#chartRssi"), options);
+        chartRssi.render();
+      }
+    }
+
+    function flattenNumericFields(obj, prefix = '', out = {}) {
+      if (!obj || typeof obj !== 'object') return out;
+      if (Array.isArray(obj)) {
+        obj.forEach((v, i) => flattenNumericFields(v, `${prefix}[${i}]`, out));
+        return out;
+      }
+      Object.entries(obj).forEach(([k, v]) => {
+        const key = prefix ? `${prefix}.${k}` : k;
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          out[key] = true;
+          return;
+        }
+        if (v && typeof v === 'object') flattenNumericFields(v, key, out);
+      });
+      return out;
+    }
+
+    function findNumericByCandidates(obj, candidates) {
+      if (!obj || typeof obj !== 'object') return null;
+      const keys = Object.keys(flattenNumericFields(obj));
+      const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
+
+      for (const c of candidates) {
+        const direct = lowerMap[c.toLowerCase()];
+        if (direct) {
+          const v = getByPath(obj, direct);
+          if (v != null) return v;
+        }
+      }
+
+      for (const k of keys) {
+        const kl = k.toLowerCase();
+        for (const c of candidates) {
+          if (kl.endsWith(`.${c.toLowerCase()}`) || kl === c.toLowerCase()) {
+            const v = getByPath(obj, k);
+            if (v != null) return v;
+          }
+        }
+      }
+      return null;
+    }
+
+    function getByPath(obj, path) {
+      if (!obj || !path) return null;
+      const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+      let cur = obj;
+      for (const p of parts) {
+        if (cur == null) return null;
+        cur = cur[p];
+      }
+      return typeof cur === 'number' && Number.isFinite(cur) ? cur : null;
+    }
+
+    async function loadPayloadExplorer() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const days = Number(daysEl.value || 30);
+      const uplinks = await fetchUplinksWindow(devEui, days);
+      if (!uplinks.length) {
+        payloadMeta.textContent = 'Letzter Uplink Payload: —';
+        payloadJson.textContent = '—';
+        return;
+      }
+
+      const latest = uplinks[uplinks.length - 1];
+      payloadMeta.textContent = `Letzter Uplink Payload @ ${new Date(latest.at).toLocaleString('de-DE')}`;
+      payloadJson.textContent = JSON.stringify(latest.decoded_json || latest.payload_json || {}, null, 2);
+
+      const fieldsMap = {};
+      uplinks.forEach((u) => {
+        flattenNumericFields(u.decoded_json, '', fieldsMap);
+        flattenNumericFields(u.payload_json, '', fieldsMap);
+      });
+      const fields = Object.keys(fieldsMap).sort();
+
+      const prev = fieldSel.value;
+      fieldSel.innerHTML = '';
+      fields.forEach((f) => {
+        const o = document.createElement('option');
+        o.value = f;
+        o.textContent = f;
+        fieldSel.appendChild(o);
+      });
+
+      if (fields.length === 0) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'Keine numerischen Felder im decoded_payload';
+        fieldSel.appendChild(o);
+      } else if (fields.includes(prev)) {
+        fieldSel.value = prev;
+      }
+
+      const selected = fieldSel.value;
+      if (!selected) return;
+
+      const labels = uplinks.map((u) => u.at);
+      const data = uplinks.map((u) => {
+        const d = getByPath(u.decoded_json, selected);
+        if (d != null) return d;
+        return getByPath(u.payload_json, selected);
+      });
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 260,
+          animations: { enabled: isDesktop() },
+          toolbar: { show: true },
+          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
+        },
+        series: [{ name: selected, data }],
+        xaxis: { type: 'datetime', categories: labels },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        tooltip: {
+          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+          y: { formatter: v => (v == null ? '—' : String(v)) }
+        },
+        legend: { show: true }
+      };
+
+      if (chartField) {
+        chartField.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
+      } else {
+        chartField = new ApexCharts(document.querySelector('#chartField'), options);
+        chartField.render();
+      }
+    }
+
+    async function loadImuSeries() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const days = Number(daysEl.value || 30);
+
+      const uplinks = await fetchUplinksWindow(devEui, days);
+      if (!uplinks.length) return;
+
+      const labels = uplinks.map(u => u.at);
+      const ax = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ax', 'ax', 'acc_x', 'accx', 'imu.ax', 'accelerometer.x', 'acceleration.x']));
+      const ay = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ay', 'ay', 'acc_y', 'accy', 'imu.ay', 'accelerometer.y', 'acceleration.y']));
+      const az = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_az', 'az', 'acc_z', 'accz', 'imu.az', 'accelerometer.z', 'acceleration.z']));
+
+      if (![ax, ay, az].some(arr => arr.some(v => v != null))) return;
+
+      const options = {
+        chart: {
+          type: 'line',
+          height: 280,
+          animations: { enabled: isDesktop() },
+          toolbar: { show: true },
+          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
+        },
+        series: [
+          { name: 'ax', data: ax },
+          { name: 'ay', data: ay },
+          { name: 'az', data: az }
+        ],
+        xaxis: { type: 'datetime', categories: labels },
+        stroke: { width: 2, curve: 'smooth' },
+        dataLabels: { enabled: false },
+        tooltip: {
+          shared: true,
+          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+        },
+        legend: { show: true }
+      };
+
+      if (chartImu) {
+        chartImu.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
+      } else {
+        chartImu = new ApexCharts(document.querySelector('#chartImu'), options);
+        chartImu.render();
+      }
+    }
+
+    function buildExportUrl(format) {
+      const devEui = devSel.value;
+      const fromIso = toIsoFromLocalDatetime(fromDt.value);
+      const toIso = toIsoFromLocalDatetime(toDt.value);
+      const q = new URLSearchParams({ devEui, format });
+      if (fromIso) q.set('from', fromIso);
+      if (toIso) q.set('to', toIso);
+      return `/api/export?${q.toString()}`;
+    }
+
+    async function refreshAll() {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      statusEl.textContent = 'Lade…';
+      try {
+        await loadLast();
+        await loadDailySeries();
+        await loadBatterySeries();
+        await loadRssiSeries();
+        await loadPayloadExplorer();
+        await loadImuSeries();
+      } finally {
+        statusEl.textContent = '';
+      }
+    }
+
+    document.getElementById('refresh').addEventListener('click', refreshAll);
+    setNowBtn.addEventListener('click', () => setNowDateInputs());
+
+    devSel.addEventListener('change', refreshAll);
+    fieldSel.addEventListener('change', loadPayloadExplorer);
+
+    document.getElementById('countTx').addEventListener('click', async () => {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const fromIso = toIsoFromLocalDatetime(fromDt.value);
+      const toIso = toIsoFromLocalDatetime(toDt.value);
+
+      if (!fromIso || !toIso) {
+        txOut.textContent = 'Bitte gültigen Zeitraum wählen.';
+        return;
+      }
+
+      const j = await (await fetch(`/api/tx-count?devEui=${encodeURIComponent(devEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`)).json();
+      txOut.textContent = `Uploads: ${j.count} (von ${new Date(fromIso).toLocaleString('de-DE')} bis ${new Date(toIso).toLocaleString('de-DE')})`;
+    });
+
+    document.getElementById('deleteRange').addEventListener('click', async () => {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const fromIso = toIsoFromLocalDatetime(fromDt.value);
+      const toIso = toIsoFromLocalDatetime(toDt.value);
+      const source = deleteSource.value || 'both';
+
+      if (!fromIso || !toIso) {
+        txOut.textContent = 'Bitte gültigen Zeitraum zum Löschen wählen.';
+        return;
+      }
+
+      const ok = window.confirm(`Range löschen für ${devEui}? Quelle: ${source}, von ${new Date(fromIso).toLocaleString('de-DE')} bis ${new Date(toIso).toLocaleString('de-DE')}`);
+      if (!ok) return;
+
+      const url = `/api/data-range?devEui=${encodeURIComponent(devEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&source=${encodeURIComponent(source)}`;
+      const res = await fetch(url, { method: 'DELETE' });
+      if (!res.ok) {
+        txOut.textContent = `Fehler beim Löschen der Range: HTTP ${res.status}`;
+        return;
+      }
+      const j = await res.json();
+      txOut.textContent = `Gelöscht (Range): readings=${j.readingsDeleted}, uplinks=${j.uplinksDeleted}`;
+      await refreshAll();
+    });
+
+    document.getElementById('deletePoint').addEventListener('click', async () => {
+      const devEui = devSel.value;
+      if (!devEui) return;
+
+      const atIso = toIsoFromLocalDatetime(pointDt.value);
+      const source = deleteSource.value || 'both';
+
+      if (!atIso) {
+        txOut.textContent = 'Bitte gültigen Zeitpunkt zum Löschen wählen.';
+        return;
+      }
+
+      const ok = window.confirm(`Einzelnen Punkt löschen für ${devEui}? Quelle: ${source}, Zeitpunkt ${new Date(atIso).toLocaleString('de-DE')}`);
+      if (!ok) return;
+
+      const url = `/api/data-point?devEui=${encodeURIComponent(devEui)}&at=${encodeURIComponent(atIso)}&source=${encodeURIComponent(source)}`;
+      const res = await fetch(url, { method: 'DELETE' });
+      if (!res.ok) {
+        txOut.textContent = `Fehler beim Löschen des Punkts: HTTP ${res.status}`;
+        return;
+      }
+      const j = await res.json();
+      txOut.textContent = `Gelöscht (Punkt): readings=${j.readingsDeleted}, uplinks=${j.uplinksDeleted}`;
+      await refreshAll();
+    });
+
+    downloadJsonBtn.addEventListener('click', () => {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      window.open(buildExportUrl('json'), '_blank');
+    });
+
+    downloadCsvBtn.addEventListener('click', () => {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      window.open(buildExportUrl('csv'), '_blank');
+    });
+
+    deleteDeviceBtn.addEventListener('click', async () => {
+      const devEui = devSel.value;
+      if (!devEui) return;
+      const ok = window.confirm(`Gerät ${devEui} wirklich löschen? Alle Daten (Readings + Uplinks) werden entfernt.`);
+      if (!ok) return;
+
+      const res = await fetch(`/api/devices/${encodeURIComponent(devEui)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        alert(`Fehler beim Löschen: HTTP ${res.status}`);
+        return;
+      }
+
+      await loadDevices();
+      await refreshAll();
+    });
+
+    // Auto-update via SSE
+    function startSse() {
+      try {
+        const es = new EventSource('/events');
+        es.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data || '{}');
+            if (msg.type === 'up' && msg.devEui && msg.devEui === devSel.value) {
+              refreshAll();
+            }
+          } catch {}
+        };
+        es.onerror = () => {
+          // silent; browser retries
+        };
+      } catch {}
+    }
+
+    (async () => {
+      setDefaultRangeHours(24);
+      await loadDevices();
+      await refreshAll();
+      startSse();
+    })();
+  </script>
+</body>
+</html>

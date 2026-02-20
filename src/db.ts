@@ -428,6 +428,51 @@ export function deleteDataRange(devEui: string, from: string, to: string, source
   return { readingsDeleted, uplinksDeleted };
 }
 
+export interface DeviceSummary {
+  dev_eui: string;
+  device_name: string | null;
+  last_seen: string | null;
+  battery_mv: number | null;
+  rssi: number | null;
+  snr: number | null;
+  total_uplinks: number;
+  avg_interval_seconds: number | null;
+  first_seen: string | null;
+}
+
+export function getDeviceSummaries(): DeviceSummary[] {
+  const devices = listDevices();
+  const summaries: DeviceSummary[] = [];
+
+  for (const d of devices) {
+    const lastUp = stmtLastUplink.get(d.dev_eui) as UplinkRow | undefined;
+    const stats = db.prepare(`
+      SELECT COUNT(*) AS cnt, MIN(at) AS first_at, MAX(at) AS last_at
+      FROM uplinks WHERE dev_eui = ?
+    `).get(d.dev_eui) as any;
+
+    let avgInterval: number | null = null;
+    if (stats && stats.cnt > 1 && stats.first_at && stats.last_at) {
+      const first = new Date(stats.first_at).getTime();
+      const last = new Date(stats.last_at).getTime();
+      avgInterval = Math.round((last - first) / (stats.cnt - 1) / 1000);
+    }
+
+    summaries.push({
+      dev_eui: d.dev_eui,
+      device_name: d.device_name ?? null,
+      last_seen: lastUp?.at ?? stats?.last_at ?? null,
+      battery_mv: lastUp?.battery_mv ?? null,
+      rssi: lastUp?.rssi ?? null,
+      snr: lastUp?.snr ?? null,
+      total_uplinks: stats?.cnt ?? 0,
+      avg_interval_seconds: avgInterval,
+      first_seen: stats?.first_at ?? null,
+    });
+  }
+  return summaries;
+}
+
 export function countTx(devEui: string | null, from: string, to: string): number {
   let sql = `
     SELECT COUNT(*) AS cnt

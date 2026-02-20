@@ -2,737 +2,1313 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <title>EMONI – Dashboard</title>
+  <title>EMONI – LoRaWAN Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/emoni-logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
-    h1 { margin-bottom: 6px; }
-    h2 { margin-top: 26px; margin-bottom: 8px; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    label { font-weight:600; }
-    select, input, button { padding:6px 8px; }
-    #status { margin:8px 0; color:#666; }
-    #last { margin:6px 0; font-size:14px; }
-    .grid { display:grid; grid-template-columns: 1fr; gap: 18px; max-width: 1200px; }
-    .card { border: 1px solid #e5e5e5; border-radius: 10px; padding: 14px; }
-    .muted { color:#666; font-size: 13px; }
-    pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; border: 1px solid #eee; border-radius: 8px; padding: 10px; max-height: 240px; overflow: auto; }
+    /* =================== CSS VARIABLES (TTN-inspired dark palette) =================== */
+    :root {
+      --ttn-blue:       #1F2D3D;
+      --ttn-dark:       #0D1117;
+      --ttn-sidebar:    #161B22;
+      --ttn-accent:     #4361EE;
+      --ttn-accent-hover:#3451DE;
+      --ttn-green:      #2DD55B;
+      --ttn-green-dark: #1AA34A;
+      --ttn-yellow:     #F5A623;
+      --ttn-orange:     #FF6B35;
+      --ttn-red:        #E53E3E;
+      --ttn-gray:       #8B949E;
+      --ttn-gray-light: #C9D1D9;
+      --ttn-border:     #30363D;
+      --ttn-card:       #161B22;
+      --ttn-card-hover: #1C2333;
+      --ttn-bg:         #0D1117;
+      --ttn-text:       #E6EDF3;
+      --ttn-text-muted: #8B949E;
+      --radius:         12px;
+      --radius-sm:      8px;
+      --shadow:         0 1px 3px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.15);
+      --transition:     .2s ease;
+    }
+
+    /* =================== RESET & BASE =================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Google Sans Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--ttn-bg);
+      color: var(--ttn-text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* =================== SCROLLBAR =================== */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--ttn-dark); }
+    ::-webkit-scrollbar-thumb { background: var(--ttn-border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--ttn-gray); }
+
+    /* =================== TOPBAR =================== */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 56px;
+      background: var(--ttn-sidebar);
+      border-bottom: 1px solid var(--ttn-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .topbar-logo {
+      height: 32px;
+      width: auto;
+    }
+    .topbar-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -.3px;
+      color: var(--ttn-text);
+    }
+    .topbar-title span { color: var(--ttn-green); }
+    .topbar-nav {
+      display: flex;
+      gap: 4px;
+    }
+    .topbar-nav button {
+      background: transparent;
+      border: none;
+      color: var(--ttn-gray);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .topbar-nav button:hover { color: var(--ttn-text); background: rgba(255,255,255,.05); }
+    .topbar-nav button.active { color: var(--ttn-text); background: rgba(67,97,238,.15); }
+    .topbar-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      background: var(--ttn-accent);
+      color: #fff;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-left: 6px;
+    }
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ttn-green);
+      animation: pulse 2s infinite;
+      display: inline-block;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .3; }
+    }
+
+    /* =================== MAIN LAYOUT =================== */
+    .main-container {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* =================== PAGE: OVERVIEW (device cards) =================== */
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .overview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .overview-header h2 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -.4px;
+    }
+    .overview-stats {
+      display: flex;
+      gap: 20px;
+    }
+    .stat-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--ttn-card);
+      border: 1px solid var(--ttn-border);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--ttn-gray-light);
+    }
+    .stat-pill .num {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--ttn-text);
+    }
+
+    /* Device Grid */
+    .device-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
+    }
+    .device-card {
+      background: var(--ttn-card);
+      border: 1px solid var(--ttn-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .device-card:hover {
+      border-color: var(--ttn-accent);
+      background: var(--ttn-card-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+    .device-card-image {
+      width: 80px;
+      height: 80px;
+      flex-shrink: 0;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #1a2332, #263245);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .device-card-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .device-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .device-card-name {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--ttn-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .device-card-eui {
+      font-size: 12px;
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      color: var(--ttn-gray);
+      margin-bottom: 8px;
+    }
+    .device-card-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .status-active { background: rgba(45, 213, 91, .12); color: var(--ttn-green); }
+    .status-warning { background: rgba(245, 166, 35, .12); color: var(--ttn-yellow); }
+    .status-inactive { background: rgba(229, 62, 62, .12); color: var(--ttn-red); }
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%; display: inline-block;
+    }
+    .status-active .status-dot { background: var(--ttn-green); }
+    .status-warning .status-dot { background: var(--ttn-yellow); }
+    .status-inactive .status-dot { background: var(--ttn-red); }
+
+    .device-card-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+      margin-top: 8px;
+    }
+    .metric-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--ttn-gray);
+    }
+    .metric-item .metric-icon { font-size: 13px; width: 16px; text-align: center; }
+    .metric-item .metric-val { color: var(--ttn-gray-light); font-weight: 500; }
+    .metric-item.health-good .metric-val { color: var(--ttn-green); }
+    .metric-item.health-warn .metric-val { color: var(--ttn-yellow); }
+    .metric-item.health-bad .metric-val  { color: var(--ttn-red); }
+
+    .rssi-bar-bg {
+      height: 4px; background: var(--ttn-border); border-radius: 2px;
+      flex: 1; max-width: 60px;
+    }
+    .rssi-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
+
+    /* =================== PAGE: DETAIL (charts) =================== */
+    .detail-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; background: var(--ttn-card);
+      border: 1px solid var(--ttn-border); border-radius: var(--radius-sm);
+      color: var(--ttn-gray-light); font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: var(--transition); margin-bottom: 16px;
+    }
+    .detail-back:hover { background: var(--ttn-card-hover); color: #fff; }
+
+    .detail-hero {
+      display: flex; align-items: center; gap: 20px;
+      padding: 20px; background: var(--ttn-card);
+      border: 1px solid var(--ttn-border); border-radius: var(--radius);
+      margin-bottom: 20px;
+    }
+    .detail-hero-img {
+      width: 72px; height: 72px; border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #1a2332, #263245);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .detail-hero-img svg { width: 50px; height: 50px; }
+    .detail-hero-info { flex: 1; }
+    .detail-hero-name { font-size: 20px; font-weight: 700; letter-spacing: -.3px; }
+    .detail-hero-eui {
+      font-size: 13px; font-family: 'SF Mono', 'Cascadia Code', monospace;
+      color: var(--ttn-gray); margin-top: 2px;
+    }
+    .detail-hero-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* KPI Row */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--ttn-card); border: 1px solid var(--ttn-border);
+      border-radius: var(--radius); padding: 16px;
+    }
+    .kpi-label {
+      font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+      color: var(--ttn-gray); font-weight: 600; margin-bottom: 4px;
+    }
+    .kpi-value { font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+    .kpi-sub { font-size: 12px; color: var(--ttn-gray); margin-top: 2px; }
+
+    /* Controls bar */
+    .controls-bar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      margin-bottom: 20px; padding: 14px 18px;
+      background: var(--ttn-card); border: 1px solid var(--ttn-border); border-radius: var(--radius);
+    }
+    .controls-bar label {
+      font-size: 12px; font-weight: 600; color: var(--ttn-gray);
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+
+    /* Form elements */
+    input, select, button { font-family: inherit; font-size: 13px; }
+    input[type="number"], input[type="text"], input[type="datetime-local"], select {
+      padding: 7px 12px; background: var(--ttn-dark);
+      border: 1px solid var(--ttn-border); border-radius: var(--radius-sm);
+      color: var(--ttn-text); transition: var(--transition);
+    }
+    input:focus, select:focus {
+      outline: none; border-color: var(--ttn-accent);
+      box-shadow: 0 0 0 3px rgba(67,97,238,.15);
+    }
+    select { cursor: pointer; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 16px; border: 1px solid var(--ttn-border);
+      border-radius: var(--radius-sm); cursor: pointer;
+      font-weight: 600; font-size: 13px; transition: var(--transition); white-space: nowrap;
+    }
+    .btn-primary { background: var(--ttn-accent); border-color: var(--ttn-accent); color: #fff; }
+    .btn-primary:hover { background: var(--ttn-accent-hover); }
+    .btn-ghost { background: transparent; color: var(--ttn-gray-light); }
+    .btn-ghost:hover { background: rgba(255,255,255,.05); color: #fff; }
+    .btn-danger { background: rgba(229,62,62,.1); border-color: rgba(229,62,62,.3); color: var(--ttn-red); }
+    .btn-danger:hover { background: rgba(229,62,62,.2); }
+    .btn-success { background: rgba(45,213,91,.1); border-color: rgba(45,213,91,.3); color: var(--ttn-green); }
+    .btn-success:hover { background: rgba(45,213,91,.2); }
+
+    /* Chart cards */
+    .chart-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .chart-card {
+      background: var(--ttn-card); border: 1px solid var(--ttn-border);
+      border-radius: var(--radius); padding: 20px;
+    }
+    .chart-card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+    }
+    .chart-card-title { font-size: 15px; font-weight: 600; color: var(--ttn-text); }
+    .chart-card-subtitle { font-size: 12px; color: var(--ttn-gray); margin-top: 10px; }
+
+    pre.payload-pre {
+      white-space: pre-wrap; word-break: break-word;
+      background: var(--ttn-dark); border: 1px solid var(--ttn-border);
+      border-radius: var(--radius-sm); padding: 12px; max-height: 200px;
+      overflow: auto; font-size: 12px;
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      color: var(--ttn-gray-light); line-height: 1.6;
+    }
+
+    .data-section {
+      padding: 16px 18px; background: var(--ttn-card);
+      border: 1px solid var(--ttn-border); border-radius: var(--radius); margin-bottom: 20px;
+    }
+    .data-section h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--ttn-gray-light); }
+    .data-row {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px;
+    }
+    .data-row:last-child { margin-bottom: 0; }
+    #txOut { font-size: 12px; color: var(--ttn-gray); margin-top: 4px; }
+
+    .empty-state { text-align: center; padding: 80px 20px; }
+    .empty-state .icon { font-size: 56px; margin-bottom: 16px; opacity: .3; }
+    .empty-state h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--ttn-gray-light); }
+    .empty-state p { color: var(--ttn-gray); font-size: 14px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .device-grid { grid-template-columns: 1fr; }
+      .topbar { padding: 0 12px; }
+      .main-container { padding: 16px; }
+      .detail-hero { flex-direction: column; align-items: flex-start; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+      .overview-stats { flex-wrap: wrap; }
+    }
+
+    /* ApexCharts dark overrides */
+    .apexcharts-tooltip { background: var(--ttn-card) !important; border-color: var(--ttn-border) !important; color: var(--ttn-text) !important; border-radius: 8px !important; box-shadow: var(--shadow) !important; }
+    .apexcharts-tooltip-title { background: var(--ttn-dark) !important; border-color: var(--ttn-border) !important; color: var(--ttn-gray-light) !important; }
+    .apexcharts-xaxistooltip, .apexcharts-yaxistooltip { background: var(--ttn-card) !important; border-color: var(--ttn-border) !important; color: var(--ttn-text) !important; }
+    .apexcharts-gridline { stroke: var(--ttn-border) !important; }
+    .apexcharts-text tspan { fill: var(--ttn-gray) !important; }
+    .apexcharts-legend-text { color: var(--ttn-gray-light) !important; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+      background: var(--ttn-card); border: 1px solid var(--ttn-border);
+      border-radius: var(--radius-sm); color: var(--ttn-text); font-size: 13px;
+      box-shadow: var(--shadow); z-index: 999;
+      display: flex; align-items: center; gap: 8px;
+      animation: slideIn .3s ease; max-width: 400px;
+    }
+    @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .toast.success { border-left: 3px solid var(--ttn-green); }
+    .toast.error { border-left: 3px solid var(--ttn-red); }
+    .toast.info { border-left: 3px solid var(--ttn-accent); }
   </style>
 </head>
 <body>
-  <h1>EMONI – Dashboard</h1>
 
-  <div class="row">
-    <label>Device:</label>
-    <select id="devSel"></select>
-
-    <label>Tage:</label>
-    <input id="days" type="number" min="1" max="365" value="30" />
-
-    <label>TZ:</label>
-    <input id="tz" type="text" value="Europe/Berlin" size="16" />
-
-    <button id="refresh">Aktualisieren</button>
-    <button id="downloadJson">Download JSON</button>
-    <button id="downloadCsv">Download CSV</button>
-    <button id="deleteDevice" style="background:#ffe3e3;border:1px solid #ff8787;">Gerät löschen</button>
+<!-- ========== TOPBAR ========== -->
+<nav class="topbar">
+  <div class="topbar-left">
+    <img src="/emoni-logo.svg" alt="EMONI" class="topbar-logo" />
+    <span class="topbar-title"><span>LoRaWAN</span> Dashboard</span>
   </div>
-
-  <div class="row" style="margin-top:10px;">
-    <label>Zeitraum:</label>
-    <input id="fromDt" type="datetime-local" />
-    <input id="toDt" type="datetime-local" />
-    <button id="setNow">Now</button>
-    <label>Quelle:</label>
-    <select id="deleteSource">
-      <option value="both">beide</option>
-      <option value="readings">readings</option>
-      <option value="uplinks">uplinks</option>
-    </select>
-    <button id="countTx">Uploads zählen</button>
-    <button id="deleteRange" style="background:#fff5f5;border:1px solid #ffa8a8;">Range löschen</button>
-    <label>Punkt:</label>
-    <input id="pointDt" type="datetime-local" />
-    <button id="deletePoint" style="background:#fff5f5;border:1px solid #ffa8a8;">Punkt löschen</button>
-    <div id="txOut" class="muted"></div>
+  <div class="topbar-nav">
+    <button id="navOverview" class="active" onclick="showPage('overview')">
+      Devices <span id="deviceCountBadge" class="topbar-badge">0</span>
+    </button>
+    <button id="navDetail" onclick="if(currentDevEui) showPage('detail')">
+      Detail
+    </button>
   </div>
+  <div class="topbar-right">
+    <span class="live-dot" title="SSE Live"></span>
+    <span style="font-size:12px;color:var(--ttn-gray)">Live</span>
+  </div>
+</nav>
 
-  <div id="status"></div>
-  <div id="last">Letzter Zählerstand: —</div>
+<!-- ========== MAIN ========== -->
+<div class="main-container">
 
-  <div class="grid">
-    <div class="card">
-      <h2>Tagesverbrauch</h2>
-      <div id="chartDaily"></div>
-      <div class="muted">Balken = Tagesverbrauch, Linie = Zählerstand (Tagesschluss)</div>
-    </div>
-
-    <div class="card">
-      <h2>Batteriespannung über Zeit (mV) + Zählerstand</h2>
-      <div id="chartBattery"></div>
-      <div class="muted">Zoom: Bereich markieren (X-Achse). Tooltip zeigt Batterie + Zähler.</div>
-    </div>
-
-    <div class="card">
-      <h2>RSSI über Zeit</h2>
-      <div id="chartRssi"></div>
-      <div class="muted">Tooltip zeigt RSSI, SNR und Zähler für denselben Punkt.</div>
-    </div>
-
-    <div class="card">
-      <h2>Payload Explorer (3rd-party Geräte)</h2>
-      <div class="row" style="margin-bottom:10px;">
-        <label>Numerisches Feld:</label>
-        <select id="fieldSel"></select>
+  <!-- ===== OVERVIEW PAGE ===== -->
+  <div id="pageOverview" class="page active">
+    <div class="overview-header">
+      <h2>Geräteübersicht</h2>
+      <div class="overview-stats">
+        <div class="stat-pill"><span>Geräte</span> <span class="num" id="statTotal">0</span></div>
+        <div class="stat-pill"><span>Aktiv</span> <span class="num" id="statActive" style="color:var(--ttn-green)">0</span></div>
+        <div class="stat-pill"><span>Warnung</span> <span class="num" id="statWarning" style="color:var(--ttn-yellow)">0</span></div>
+        <div class="stat-pill"><span>Inaktiv</span> <span class="num" id="statInactive" style="color:var(--ttn-red)">0</span></div>
       </div>
-      <div id="chartField"></div>
-      <div class="muted" id="payloadMeta">Letzter Uplink Payload:</div>
-      <pre id="payloadJson">—</pre>
     </div>
-
-    <div class="card">
-      <h2>IMU Position (ax / ay / az)</h2>
-      <div id="chartImu"></div>
-      <div class="muted">Nutzt erkannte Felder wie ax/ay/az (auch verschachtelt, z. B. imu.ax).</div>
+    <div id="deviceGrid" class="device-grid"></div>
+    <div id="emptyState" class="empty-state" style="display:none">
+      <div class="icon"></div>
+      <h3>Keine Geräte gefunden</h3>
+      <p>Warte auf den ersten Uplink von einem LoRaWAN-Gerät…</p>
     </div>
   </div>
 
-  <script src="/vendor/apexcharts/apexcharts.min.js"></script>
-  <script>
-    const devSel = document.getElementById('devSel');
-    const daysEl = document.getElementById('days');
-    const tzEl = document.getElementById('tz');
-    const statusEl = document.getElementById('status');
-    const lastEl = document.getElementById('last');
+  <!-- ===== DETAIL PAGE ===== -->
+  <div id="pageDetail" class="page">
+    <button class="detail-back" onclick="showPage('overview')">← Zurück zur Übersicht</button>
 
-    const fromDt = document.getElementById('fromDt');
-    const toDt = document.getElementById('toDt');
-    const pointDt = document.getElementById('pointDt');
-    const setNowBtn = document.getElementById('setNow');
-    const deleteSource = document.getElementById('deleteSource');
-    const txOut = document.getElementById('txOut');
-    const fieldSel = document.getElementById('fieldSel');
-    const payloadMeta = document.getElementById('payloadMeta');
-    const payloadJson = document.getElementById('payloadJson');
-    const downloadJsonBtn = document.getElementById('downloadJson');
-    const downloadCsvBtn = document.getElementById('downloadCsv');
-    const deleteDeviceBtn = document.getElementById('deleteDevice');
+    <div class="detail-hero">
+      <div class="detail-hero-img">
+        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="16" y="8" width="32" height="48" rx="6" fill="#263245" stroke="#4361EE" stroke-width="2"/>
+          <circle cx="32" cy="24" r="8" fill="#1F2D3D" stroke="#4361EE" stroke-width="1.5"/>
+          <path d="M29 24l2 2 4-4" stroke="#2DD55B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="24" y="38" width="16" height="4" rx="2" fill="#30363D"/>
+          <rect x="24" y="44" width="12" height="4" rx="2" fill="#30363D"/>
+          <circle cx="26" cy="14" r="1.5" fill="#2DD55B"/>
+        </svg>
+      </div>
+      <div class="detail-hero-info">
+        <div class="detail-hero-name" id="detailName">—</div>
+        <div class="detail-hero-eui" id="detailEui">—</div>
+      </div>
+      <div class="detail-hero-actions">
+        <button class="btn btn-success" id="downloadJson">JSON</button>
+        <button class="btn btn-success" id="downloadCsv">CSV</button>
+        <button class="btn btn-danger" id="deleteDevice">Gerät löschen</button>
+      </div>
+    </div>
 
-    let chartDaily;
-    let chartBattery;
-    let chartRssi;
-    let chartField;
-    let chartImu;
+    <!-- KPI -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Letzter Uplink</div>
+        <div class="kpi-value" id="kpiLastSeen">—</div>
+        <div class="kpi-sub" id="kpiLastSeenAgo"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Batterie</div>
+        <div class="kpi-value" id="kpiBattery">—</div>
+        <div class="kpi-sub" id="kpiBatterySub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">RSSI</div>
+        <div class="kpi-value" id="kpiRssi">—</div>
+        <div class="kpi-sub" id="kpiRssiSub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Zählerstand</div>
+        <div class="kpi-value" id="kpiMeter">—</div>
+        <div class="kpi-sub" id="kpiMeterSub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Upload-Intervall</div>
+        <div class="kpi-value" id="kpiInterval">—</div>
+        <div class="kpi-sub" id="kpiIntervalSub"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Gesamte Uplinks</div>
+        <div class="kpi-value" id="kpiTotal">—</div>
+        <div class="kpi-sub" id="kpiTotalSub"></div>
+      </div>
+    </div>
 
-    const isDesktop = () => window.innerWidth > 800;
+    <!-- Controls -->
+    <div class="controls-bar">
+      <label>Tage</label>
+      <input id="days" type="number" min="1" max="365" value="30" style="width:70px" />
+      <label>Zeitzone</label>
+      <input id="tz" type="text" value="Europe/Berlin" style="width:140px" />
+      <button class="btn btn-primary" id="refresh">Aktualisieren</button>
+    </div>
 
-    function toIsoFromLocalDatetime(localVal) {
-      if (!localVal) return '';
-      // datetime-local has no TZ; interpret as local browser TZ and convert to ISO
-      const d = new Date(localVal);
-      if (isNaN(d.getTime())) return '';
-      return d.toISOString();
+    <!-- Data management -->
+    <div class="data-section">
+      <h3>Datenverwaltung</h3>
+      <div class="data-row">
+        <label>Zeitraum:</label>
+        <input id="fromDt" type="datetime-local" />
+        <span style="color:var(--ttn-gray)">bis</span>
+        <input id="toDt" type="datetime-local" />
+        <button class="btn btn-ghost" id="setNow">Jetzt</button>
+        <label>Quelle:</label>
+        <select id="deleteSource">
+          <option value="both">Beide</option>
+          <option value="readings">Readings</option>
+          <option value="uplinks">Uplinks</option>
+        </select>
+      </div>
+      <div class="data-row">
+        <button class="btn btn-ghost" id="countTx">Uploads zählen</button>
+        <button class="btn btn-danger" id="deleteRange">Bereich löschen</button>
+        <label>Einzelpunkt:</label>
+        <input id="pointDt" type="datetime-local" />
+        <button class="btn btn-danger" id="deletePoint">Punkt löschen</button>
+      </div>
+      <div id="txOut"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Tagesverbrauch</span></div>
+        <div id="chartDaily"></div>
+        <div class="chart-card-subtitle">Balken = Tagesverbrauch · Linie = Zählerstand (Tagesschluss)</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Batteriespannung (mV)</span></div>
+        <div id="chartBattery"></div>
+        <div class="chart-card-subtitle">Zoom: Bereich markieren · Tooltip zeigt Batterie + Zähler</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">RSSI über Zeit</span></div>
+        <div id="chartRssi"></div>
+        <div class="chart-card-subtitle">Signal-Stärke (dBm) · Tooltip zeigt RSSI, SNR und Zähler</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Payload Explorer</span></div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+          <label style="font-size:12px;color:var(--ttn-gray)">Feld:</label>
+          <select id="fieldSel" style="flex:1;max-width:300px"></select>
+        </div>
+        <div id="chartField"></div>
+        <div class="chart-card-subtitle" id="payloadMeta">Letzter Uplink-Payload:</div>
+        <pre class="payload-pre" id="payloadJson">—</pre>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">IMU Position (ax / ay / az)</span></div>
+        <div id="chartImu"></div>
+        <div class="chart-card-subtitle">Beschleunigungssensor-Daten (imu_ax, imu_ay, imu_az)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SCRIPTS ========== -->
+<script src="/vendor/apexcharts/apexcharts.min.js"></script>
+<script>
+// =================== GLOBALS ===================
+let currentDevEui = null;
+let deviceSummaries = [];
+let chartDaily, chartBattery, chartRssi, chartField, chartImu;
+
+const $ = (id) => document.getElementById(id);
+const isDesktop = () => window.innerWidth > 800;
+
+// =================== NAVIGATION ===================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.topbar-nav button').forEach(b => b.classList.remove('active'));
+  if (page === 'overview') {
+    $('pageOverview').classList.add('active');
+    $('navOverview').classList.add('active');
+    loadOverview();
+  } else {
+    $('pageDetail').classList.add('active');
+    $('navDetail').classList.add('active');
+    if (currentDevEui) refreshDetail();
+  }
+}
+
+// =================== TOAST ===================
+function showToast(msg, type = 'info') {
+  const old = document.querySelector('.toast');
+  if (old) old.remove();
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { if (t.parentNode) t.remove(); }, 4000);
+}
+
+// =================== DEVICE STATUS HELPERS ===================
+function getDeviceStatus(dev) {
+  if (!dev.last_seen) return 'inactive';
+  const ago = Date.now() - new Date(dev.last_seen).getTime();
+  const interval = dev.avg_interval_seconds ? dev.avg_interval_seconds * 1000 : 3600_000;
+  // Active if last seen within 3x interval; warning within 6x; otherwise inactive
+  if (ago < interval * 3) return 'active';
+  if (ago < interval * 6) return 'warning';
+  return 'inactive';
+}
+
+function getStatusLabel(status) {
+  if (status === 'active') return 'Online';
+  if (status === 'warning') return 'Verzögert';
+  return 'Offline';
+}
+
+function getBatteryHealth(mv) {
+  if (mv == null) return 'unknown';
+  if (mv >= 3400) return 'good';
+  if (mv >= 3000) return 'warn';
+  return 'bad';
+}
+
+function getBatteryPercent(mv) {
+  if (mv == null) return null;
+  const pct = Math.round(((mv - 2800) / (4200 - 2800)) * 100);
+  return Math.max(0, Math.min(100, pct));
+}
+
+function rssiToDistance(rssi) {
+  if (rssi == null) return null;
+  const absRssi = Math.abs(rssi);
+  if (absRssi < 40) return '< 10 m';
+  if (absRssi < 70) return '~ 10–100 m';
+  if (absRssi < 90) return '~ 100–500 m';
+  if (absRssi < 110) return '~ 0.5–2 km';
+  return '> 2 km';
+}
+
+function rssiToBarWidth(rssi) {
+  if (rssi == null) return 10;
+  return Math.max(5, Math.min(100, ((rssi + 130) / 100) * 100));
+}
+
+function rssiToBarColor(rssi) {
+  if (rssi == null) return 'var(--ttn-gray)';
+  if (rssi > -70) return 'var(--ttn-green)';
+  if (rssi > -100) return 'var(--ttn-yellow)';
+  return 'var(--ttn-red)';
+}
+
+function formatInterval(seconds) {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`;
+  return `${(seconds / 86400).toFixed(1)} d`;
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return `vor ${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `vor ${min} min`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `vor ${hrs}h ${min % 60}m`;
+  const days = Math.floor(hrs / 24);
+  return `vor ${days}d ${hrs % 24}h`;
+}
+
+// =================== OVERVIEW PAGE ===================
+async function loadOverview() {
+  try {
+    const resp = await fetch('/api/device-summaries');
+    const j = await resp.json();
+    deviceSummaries = j.devices || [];
+  } catch (err) {
+    showToast('Fehler beim Laden der Geräte', 'error');
+    return;
+  }
+
+  const grid = $('deviceGrid');
+  const empty = $('emptyState');
+  $('deviceCountBadge').textContent = deviceSummaries.length;
+  $('statTotal').textContent = deviceSummaries.length;
+
+  let active = 0, warning = 0, inactive = 0;
+  deviceSummaries.forEach(d => {
+    const st = getDeviceStatus(d);
+    if (st === 'active') active++;
+    else if (st === 'warning') warning++;
+    else inactive++;
+  });
+  $('statActive').textContent = active;
+  $('statWarning').textContent = warning;
+  $('statInactive').textContent = inactive;
+
+  if (!deviceSummaries.length) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+  grid.innerHTML = deviceSummaries.map(dev => {
+    const status = getDeviceStatus(dev);
+    const statusLabel = getStatusLabel(status);
+    const battHealth = getBatteryHealth(dev.battery_mv);
+    const battPct = getBatteryPercent(dev.battery_mv);
+    const dist = rssiToDistance(dev.rssi);
+    const barW = rssiToBarWidth(dev.rssi);
+    const barC = rssiToBarColor(dev.rssi);
+    const interval = formatInterval(dev.avg_interval_seconds);
+    const name = dev.device_name || 'Unbenannt';
+    const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#30363D';
+    const ledCol = status === 'active' ? '#2DD55B' : '#30363D';
+
+    return `
+      <div class="device-card" onclick="openDevice('${dev.dev_eui}')">
+        <div class="device-card-image">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:56px">
+            <rect x="14" y="6" width="36" height="52" rx="6" fill="#1a2332" stroke="${strokeCol}" stroke-width="2"/>
+            <circle cx="32" cy="22" r="9" fill="#0D1117" stroke="${strokeCol}" stroke-width="1.5"/>
+            <path d="M28 11h8" stroke="#30363D" stroke-width="2" stroke-linecap="round"/>
+            <rect x="24" y="36" width="16" height="3" rx="1.5" fill="#263245"/>
+            <rect x="24" y="41" width="12" height="3" rx="1.5" fill="#263245"/>
+            <rect x="24" y="46" width="14" height="3" rx="1.5" fill="#263245"/>
+            ${status === 'active' ? `<circle cx="32" cy="22" r="4" fill="rgba(45,213,91,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : `<circle cx="32" cy="22" r="2" fill="${ledCol}"/>`}
+          </svg>
+        </div>
+        <div class="device-card-body">
+          <div class="device-card-header">
+            <span class="device-card-name">${name}</span>
+            <span class="device-card-status status-${status}">
+              <span class="status-dot"></span> ${statusLabel}
+            </span>
+          </div>
+          <div class="device-card-eui">${dev.dev_eui}</div>
+          <div class="device-card-metrics">
+            <div class="metric-item ${battHealth === 'good' ? 'health-good' : battHealth === 'warn' ? 'health-warn' : battHealth === 'bad' ? 'health-bad' : ''}">
+              <span class="metric-icon"></span>
+              <span class="metric-val">${dev.battery_mv != null ? `${dev.battery_mv} mV${battPct != null ? ` (${battPct}%)` : ''}` : '—'}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-icon"></span>
+              <span class="metric-val">${dev.rssi != null ? `${dev.rssi} dBm` : '—'}</span>
+              <div class="rssi-bar-bg"><div class="rssi-bar-fill" style="width:${barW}%;background:${barC}"></div></div>
+            </div>
+            <div class="metric-item">
+              <span class="metric-icon"></span>
+              <span class="metric-val">${interval}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-icon"></span>
+              <span class="metric-val">${dist || '—'}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-icon"></span>
+              <span class="metric-val">${timeAgo(dev.last_seen)}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-icon"></span>
+              <span class="metric-val">${dev.total_uplinks} Uplinks</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openDevice(devEui) {
+  currentDevEui = devEui;
+  showPage('detail');
+}
+
+// =================== DETAIL PAGE ===================
+function toIsoFromLocalDatetime(localVal) {
+  if (!localVal) return '';
+  const d = new Date(localVal);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString();
+}
+
+function setDefaultRangeHours(hoursBack) {
+  const now = new Date();
+  const from = new Date(now.getTime() - hoursBack * 3600 * 1000);
+  const f = (d) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  $('fromDt').value = f(from);
+  $('toDt').value = f(now);
+  $('pointDt').value = f(now);
+}
+
+function setNowDateInputs() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const f = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('toDt').value = f(now);
+  $('pointDt').value = f(now);
+}
+
+async function refreshDetail() {
+  if (!currentDevEui) return;
+
+  const dev = deviceSummaries.find(d => d.dev_eui === currentDevEui);
+  $('detailName').textContent = dev?.device_name || 'Unbenannt';
+  $('detailEui').textContent = currentDevEui;
+
+  // KPIs
+  try {
+    const [lastR, lastU] = await Promise.all([
+      fetch(`/api/last-reading?devEui=${encodeURIComponent(currentDevEui)}`).then(r => r.json()),
+      fetch(`/api/last-uplink?devEui=${encodeURIComponent(currentDevEui)}`).then(r => r.json()),
+    ]);
+
+    const last = lastU.last || lastR.last;
+    if (last) {
+      $('kpiLastSeen').textContent = new Date(last.at).toLocaleString('de-DE');
+      $('kpiLastSeenAgo').textContent = timeAgo(last.at);
+    } else {
+      $('kpiLastSeen').textContent = '—';
+      $('kpiLastSeenAgo').textContent = '';
     }
 
-    function setDefaultRangeHours(hoursBack) {
-      const now = new Date();
-      const from = new Date(now.getTime() - hoursBack*3600*1000);
-      // Format for datetime-local: YYYY-MM-DDTHH:MM
-      const f = (d) => {
-        const pad = (n) => String(n).padStart(2,'0');
-        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      };
-      fromDt.value = f(from);
-      toDt.value = f(now);
-      pointDt.value = f(now);
+    const battMv = last?.battery_mv ?? dev?.battery_mv;
+    if (battMv != null) {
+      const pct = getBatteryPercent(battMv);
+      const health = getBatteryHealth(battMv);
+      $('kpiBattery').textContent = `${battMv} mV`;
+      $('kpiBattery').style.color = health === 'good' ? 'var(--ttn-green)' : health === 'warn' ? 'var(--ttn-yellow)' : 'var(--ttn-red)';
+      $('kpiBatterySub').textContent = pct != null ? `≈ ${pct}%` : '';
+    } else {
+      $('kpiBattery').textContent = '—';
+      $('kpiBattery').style.color = '';
+      $('kpiBatterySub').textContent = '';
     }
 
-    function setNowDateInputs() {
-      const now = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
-      const f = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      toDt.value = f(now);
-      pointDt.value = f(now);
+    const rssi = last?.rssi ?? dev?.rssi;
+    if (rssi != null) {
+      $('kpiRssi').textContent = `${rssi} dBm`;
+      $('kpiRssi').style.color = rssi > -70 ? 'var(--ttn-green)' : rssi > -100 ? 'var(--ttn-yellow)' : 'var(--ttn-red)';
+      $('kpiRssiSub').textContent = rssiToDistance(rssi) || '';
+    } else {
+      $('kpiRssi').textContent = '—';
+      $('kpiRssi').style.color = '';
+      $('kpiRssiSub').textContent = '';
     }
 
-    async function loadDevices() {
-      const j = await (await fetch('/api/devices')).json();
-      devSel.innerHTML = '';
-      (j.devices || []).forEach(d => {
-        const o = document.createElement('option');
-        o.value = d.dev_eui;
-        o.textContent = d.device_name ? `${d.dev_eui} — ${d.device_name}` : d.dev_eui;
-        devSel.appendChild(o);
-      });
-      statusEl.textContent = devSel.value ? '' : 'Noch keine Geräte — warte auf Uplinks.';
+    if (lastR.last?.meter_value != null) {
+      $('kpiMeter').textContent = Number(lastR.last.meter_value).toFixed(2).replace('.', ',');
+      $('kpiMeterSub').textContent = `@ ${new Date(lastR.last.at).toLocaleString('de-DE')}`;
+    } else {
+      $('kpiMeter').textContent = '—';
+      $('kpiMeterSub').textContent = 'Kein Zählerwert';
     }
 
-    async function loadLast() {
-      const devEui = devSel.value;
-      if (!devEui) { lastEl.textContent = 'Letzter Zählerstand: —'; return; }
-      const j = await (await fetch(`/api/last-reading?devEui=${encodeURIComponent(devEui)}`)).json();
-      if (!j.last) {
-        const ju = await (await fetch(`/api/last-uplink?devEui=${encodeURIComponent(devEui)}`)).json();
-        if (!ju.last) {
-          lastEl.textContent = 'Letzter Zählerstand: —';
-          return;
+    if (dev?.avg_interval_seconds != null) {
+      $('kpiInterval').textContent = formatInterval(dev.avg_interval_seconds);
+      $('kpiIntervalSub').textContent = `Ø aus ${dev.total_uplinks} Uplinks`;
+    } else {
+      $('kpiInterval').textContent = '—';
+      $('kpiIntervalSub').textContent = '';
+    }
+
+    if (dev) {
+      $('kpiTotal').textContent = dev.total_uplinks;
+      $('kpiTotalSub').textContent = dev.first_seen ? `Seit ${new Date(dev.first_seen).toLocaleDateString('de-DE')}` : '';
+    }
+  } catch (err) {
+    showToast('Fehler beim Laden der KPIs', 'error');
+  }
+
+  // Charts
+  try {
+    await Promise.all([
+      loadDailySeries(),
+      loadBatterySeries(),
+      loadRssiSeries(),
+      loadPayloadExplorer(),
+      loadImuSeries(),
+    ]);
+  } catch (err) {
+    console.error('Chart error:', err);
+  }
+}
+
+// =================== APEX CHART THEME ===================
+const darkTheme = {
+  theme: { mode: 'dark', palette: 'palette1' },
+  chart: { background: 'transparent', foreColor: '#8B949E', fontFamily: 'Google Sans Text, -apple-system, sans-serif' },
+  grid: { borderColor: '#30363D', strokeDashArray: 3 },
+  colors: ['#4361EE', '#2DD55B', '#F5A623', '#E53E3E', '#8B5CF6', '#06B6D4'],
+};
+
+// =================== CHART: DAILY CONSUMPTION ===================
+function buildDailyOptions(labels, cons, closing, unitLabel) {
+  const maxBar = Math.ceil(Math.max(0, ...cons.map(v => v || 0)));
+  const formatDailyDate = (raw) => {
+    let value = raw;
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw < labels.length) value = labels[raw];
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value ?? '—');
+    return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  return {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, height: 340, stacked: false, animations: { enabled: isDesktop() }, toolbar: { show: true } },
+    series: [
+      { name: 'Verbrauch', type: 'bar', data: cons },
+      { name: 'Zählerstand', type: 'line', data: closing },
+    ],
+    stroke: { width: [0, 2], curve: 'smooth' },
+    dataLabels: { enabled: false },
+    plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } },
+    xaxis: {
+      type: 'category', categories: labels,
+      labels: { formatter: (val) => { const d = new Date(val); return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); } }
+    },
+    yaxis: [
+      { title: { text: `${unitLabel} pro Tag`, style: { color: '#8B949E' } }, max: maxBar > 0 ? maxBar : undefined, labels: { formatter: v => Number(v || 0).toFixed(2).replace('.', ',') } },
+      { opposite: true, title: { text: 'Zählerstand', style: { color: '#8B949E' } }, labels: { formatter: v => Number(v || 0).toFixed(2).replace('.', ',') } }
+    ],
+    tooltip: {
+      shared: true, intersect: false,
+      x: { formatter: (val) => formatDailyDate(val) },
+      y: { formatter: (v) => (v == null ? '—' : Number(v).toFixed(2).replace('.', ',')) }
+    },
+    legend: { show: true, labels: { colors: '#C9D1D9' } }
+  };
+}
+
+async function loadDailySeries() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const tz = $('tz').value || 'Europe/Berlin';
+  const j = await (await fetch(`/api/consumption/daily?devEui=${encodeURIComponent(currentDevEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
+  const labels = (j.series || []).map(x => x.date);
+  const cons = (j.series || []).map(x => (x.consumption == null ? 0 : x.consumption));
+  const closing = (j.series || []).map(x => (x.closing == null ? null : x.closing));
+  const options = buildDailyOptions(labels, cons, closing, 'm³');
+
+  if (chartDaily) { chartDaily.updateOptions(options); }
+  else { chartDaily = new ApexCharts($('chartDaily'), options); chartDaily.render(); }
+}
+
+// =================== FETCH UPLINKS ===================
+async function fetchUplinksWindow(devEui, days) {
+  const resp = await fetch(`/api/uplinks?devEui=${encodeURIComponent(devEui)}&limit=2000`);
+  const j = await resp.json();
+  let uplinks = j.uplinks || [];
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return uplinks.filter(r => new Date(r.at).getTime() >= cutoff);
+}
+
+// =================== CHART: BATTERY ===================
+async function loadBatterySeries() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const uplinks = await fetchUplinksWindow(currentDevEui, days);
+  if (!uplinks.length) return;
+
+  const labels = uplinks.map(r => r.at);
+  const batt = uplinks.map(r => (r.battery_mv != null ? r.battery_mv : null));
+  const meter = uplinks.map(r => (r.meter_value != null ? r.meter_value : null));
+  const hasMeter = meter.some(v => v != null);
+  const series = [{ name: 'Batterie (mV)', type: 'line', data: batt }];
+  if (hasMeter) series.push({ name: 'Zählerstand', type: 'line', data: meter });
+
+  const options = {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, height: 300, toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
+    series,
+    xaxis: { type: 'datetime', categories: labels },
+    stroke: { width: 2, curve: 'smooth' },
+    dataLabels: { enabled: false },
+    yaxis: [
+      { title: { text: 'mV', style: { color: '#8B949E' } }, labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) } },
+      { opposite: true, show: hasMeter, title: { text: 'Zählerstand', style: { color: '#8B949E' } }, labels: { formatter: v => (v == null ? '—' : Number(v).toFixed(2).replace('.', ',')) } }
+    ],
+    tooltip: {
+      shared: true, intersect: false,
+      x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+      y: {
+        formatter: (val, opts) => {
+          const sIdx = opts.seriesIndex;
+          const idx = opts.dataPointIndex;
+          const mv = uplinks[idx]?.meter_value;
+          if (sIdx === 0) {
+            const left = val == null ? '—' : `${Math.round(val)} mV`;
+            const m = mv == null ? '' : ` | Zähler ${Number(mv).toFixed(2).replace('.', ',')}`;
+            return left + m;
+          }
+          return val == null ? '—' : Number(val).toFixed(2).replace('.', ',');
         }
-        const at = new Date(ju.last.at);
-        const batt = ju.last.battery_mv != null ? ` | Batterie ${ju.last.battery_mv} mV` : '';
-        const rssi = ju.last.rssi != null ? ` | RSSI ${ju.last.rssi} dBm` : '';
-        const snr = ju.last.snr != null ? ` | SNR ${Number(ju.last.snr).toFixed(1)} dB` : '';
-        lastEl.textContent = `Letzter Uplink (ohne Zählerwert) @ ${at.toLocaleString('de-DE')}${batt}${rssi}${snr}`;
-        return;
       }
-      const at = new Date(j.last.at);
-      const batt = j.last.battery_mv != null ? ` | Batterie ${j.last.battery_mv} mV` : '';
-      const rssi = j.last.rssi != null ? ` | RSSI ${j.last.rssi} dBm` : '';
-      const snr = j.last.snr != null ? ` | SNR ${Number(j.last.snr).toFixed(1)} dB` : '';
-      lastEl.textContent = `Letzter Zählerstand: ${Number(j.last.meter_value).toFixed(2).replace('.', ',')} @ ${at.toLocaleString('de-DE')}${batt}${rssi}${snr}`;
-    }
+    },
+    legend: { show: true, labels: { colors: '#C9D1D9' } }
+  };
 
-    function buildDailyOptions(labels, cons, closing, unitLabel) {
-      const maxBar = Math.ceil(Math.max(0, ...cons.map(v => v || 0)));
+  if (chartBattery) { chartBattery.updateOptions(options); }
+  else { chartBattery = new ApexCharts($('chartBattery'), options); chartBattery.render(); }
+}
 
-      return {
-        chart: {
-          height: 360,
-          stacked: false,
-          animations: { enabled: isDesktop() },
-          toolbar: { show: false },
-          zoom: { enabled: false }
-        },
-        series: [
-          { name: 'Verbrauch', type: 'bar', data: cons },
-          { name: 'Zählerstand', type: 'line', data: closing },
-        ],
-        stroke: { width: [0, 2], curve: 'smooth' },
-        dataLabels: { enabled: false },
-        plotOptions: { bar: { endingShape: 'rounded', borderRadius: 2 } },
-        xaxis: {
-          type: 'category',
-          categories: labels,
-          labels: {
-            formatter: (val) => {
-              const d = new Date(val);
-              return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
-            }
-          }
-        },
-        yaxis: [
-          {
-            title: { text: `${unitLabel} pro Tag` },
-            max: maxBar > 0 ? maxBar : undefined,
-            labels: { formatter: v => Number(v || 0).toFixed(2).replace('.', ',') }
-          },
-          {
-            opposite: true,
-            title: { text: 'Zählerstand' },
-            labels: { formatter: v => Number(v || 0).toFixed(2).replace('.', ',') }
-          }
-        ],
-        tooltip: {
-          shared: true,
-          intersect: false,
-          x: { formatter: (val) => new Date(val).toLocaleDateString('de-DE') },
-          y: { formatter: (v) => (v == null ? '—' : Number(v).toFixed(2).replace('.', ',')) }
-        },
-        legend: { show: true }
-      };
-    }
+// =================== CHART: RSSI ===================
+async function loadRssiSeries() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const uplinks = await fetchUplinksWindow(currentDevEui, days);
+  if (!uplinks.length) return;
 
-    async function loadDailySeries() {
-      const devEui = devSel.value;
-      if (!devEui) return;
+  const labels = uplinks.map(r => r.at);
+  const rssiValues = uplinks.map(r => (r.rssi != null ? r.rssi : null));
 
-      const days = Number(daysEl.value || 30);
-      const tz = tzEl.value || 'Europe/Berlin';
-
-      const j = await (await fetch(`/api/consumption/daily?devEui=${encodeURIComponent(devEui)}&days=${days}&tz=${encodeURIComponent(tz)}`)).json();
-
-      const labels = (j.series || []).map(x => x.date);
-      const cons = (j.series || []).map(x => (x.consumption == null ? 0 : x.consumption));
-      const closing = (j.series || []).map(x => (x.closing == null ? null : x.closing));
-
-      const options = buildDailyOptions(labels, cons, closing, 'm³');
-
-      if (chartDaily) {
-        chartDaily.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
-      } else {
-        chartDaily = new ApexCharts(document.querySelector("#chartDaily"), options);
-        chartDaily.render();
-      }
-    }
-
-    async function fetchReadingsWindow(devEui, days) {
-      const resp = await fetch(`/api/readings?devEui=${encodeURIComponent(devEui)}`);
-      const j = await resp.json();
-      let readings = j.readings || [];
-
-      const now = Date.now();
-      const cutoff = now - days * 24 * 60 * 60 * 1000;
-      readings = readings.filter(r => new Date(r.at).getTime() >= cutoff);
-      return readings;
-    }
-
-    async function fetchUplinksWindow(devEui, days) {
-      const resp = await fetch(`/api/uplinks?devEui=${encodeURIComponent(devEui)}&limit=2000`);
-      const j = await resp.json();
-      let uplinks = j.uplinks || [];
-
-      const now = Date.now();
-      const cutoff = now - days * 24 * 60 * 60 * 1000;
-      uplinks = uplinks.filter(r => new Date(r.at).getTime() >= cutoff);
-      return uplinks;
-    }
-
-    async function loadBatterySeries() {
-      const devEui = devSel.value;
-      if (!devEui) return;
-
-      const days = Number(daysEl.value || 30);
-      const uplinks = await fetchUplinksWindow(devEui, days);
-      if (!uplinks.length) return;
-
-      const labels = uplinks.map(r => r.at);
-      const batt = uplinks.map(r => (r.battery_mv != null ? r.battery_mv : null));
-      const meter = uplinks.map(r => (r.meter_value != null ? r.meter_value : null));
-      const hasMeter = meter.some(v => v != null);
-
-      const series = [{ name: 'Batterie (mV)', type: 'line', data: batt }];
-      if (hasMeter) {
-        series.push({ name: 'Zählerstand', type: 'line', data: meter });
-      }
-
-      const options = {
-        chart: {
-          height: 320,
-          animations: { enabled: isDesktop() },
-          toolbar: { show: true },
-          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
-        },
-        series,
-        xaxis: { type: 'datetime', categories: labels },
-        stroke: { width: 2, curve: 'smooth' },
-        dataLabels: { enabled: false },
-        yaxis: [
-          { title: { text: 'mV' }, labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) } },
-          { opposite: true, show: hasMeter, title: { text: 'Zählerstand' }, labels: { formatter: v => (v == null ? '—' : Number(v).toFixed(2).replace('.', ',')) } }
-        ],
-        tooltip: {
-          shared: true,
-          intersect: false,
-          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
-          y: {
-            formatter: (val, opts) => {
-              const sIdx = opts.seriesIndex;
-              const idx = opts.dataPointIndex;
-              const mv = uplinks[idx] && uplinks[idx].meter_value != null ? uplinks[idx].meter_value : null;
-              if (sIdx === 0) {
-                const left = val == null ? '—' : `${Math.round(val)} mV`;
-                const m = mv == null ? '' : ` | Zähler ${Number(mv).toFixed(2).replace('.', ',')}`;
-                return left + m;
-              }
-              return val == null ? '—' : Number(val).toFixed(2).replace('.', ',');
-            }
-          }
-        },
-        legend: { show: true }
-      };
-
-      if (chartBattery) {
-        chartBattery.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
-      } else {
-        chartBattery = new ApexCharts(document.querySelector("#chartBattery"), options);
-        chartBattery.render();
-      }
-    }
-
-    async function loadRssiSeries() {
-      const devEui = devSel.value;
-      if (!devEui) return;
-
-      const days = Number(daysEl.value || 30);
-      const uplinks = await fetchUplinksWindow(devEui, days);
-      if (!uplinks.length) return;
-
-      const labels = uplinks.map(r => r.at);
-      const rssiValues = uplinks.map(r => (r.rssi != null ? r.rssi : null));
-
-      const options = {
-        chart: {
-          type: 'line',
-          height: 260,
-          animations: { enabled: isDesktop() },
-          toolbar: { show: true },
-          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
-        },
-        series: [{ name: 'RSSI (dBm)', data: rssiValues }],
-        xaxis: { type: 'datetime', categories: labels },
-        yaxis: {
-          title: { text: 'RSSI (dBm)' },
-          labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) }
-        },
-        stroke: { width: 2, curve: 'smooth' },
-        dataLabels: { enabled: false },
-        tooltip: {
-          shared: false,
-          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
-          y: {
-            formatter: (val, opts) => {
-              const idx = opts.dataPointIndex;
-              const mv = uplinks[idx] && uplinks[idx].meter_value != null ? uplinks[idx].meter_value : null;
-              const snr = uplinks[idx] && uplinks[idx].snr != null ? uplinks[idx].snr : null;
-
-              const parts = [];
-              parts.push(val == null ? '—' : `${Math.round(val)} dBm`);
-              if (snr != null) parts.push(`SNR ${Number(snr).toFixed(1)} dB`);
-              if (mv != null) parts.push(`Zähler ${Number(mv).toFixed(2).replace('.', ',')}`);
-              return parts.join(' | ');
-            }
-          }
-        },
-        legend: { show: true }
-      };
-
-      if (chartRssi) {
-        chartRssi.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
-      } else {
-        chartRssi = new ApexCharts(document.querySelector("#chartRssi"), options);
-        chartRssi.render();
-      }
-    }
-
-    function flattenNumericFields(obj, prefix = '', out = {}) {
-      if (!obj || typeof obj !== 'object') return out;
-      if (Array.isArray(obj)) {
-        obj.forEach((v, i) => flattenNumericFields(v, `${prefix}[${i}]`, out));
-        return out;
-      }
-      Object.entries(obj).forEach(([k, v]) => {
-        const key = prefix ? `${prefix}.${k}` : k;
-        if (typeof v === 'number' && Number.isFinite(v)) {
-          out[key] = true;
-          return;
-        }
-        if (v && typeof v === 'object') flattenNumericFields(v, key, out);
-      });
-      return out;
-    }
-
-    function findNumericByCandidates(obj, candidates) {
-      if (!obj || typeof obj !== 'object') return null;
-      const keys = Object.keys(flattenNumericFields(obj));
-      const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
-
-      for (const c of candidates) {
-        const direct = lowerMap[c.toLowerCase()];
-        if (direct) {
-          const v = getByPath(obj, direct);
-          if (v != null) return v;
+  const options = {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, type: 'line', height: 260, toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
+    series: [{ name: 'RSSI (dBm)', data: rssiValues }],
+    xaxis: { type: 'datetime', categories: labels },
+    yaxis: { title: { text: 'RSSI (dBm)', style: { color: '#8B949E' } }, labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) } },
+    stroke: { width: 2, curve: 'smooth' },
+    dataLabels: { enabled: false },
+    tooltip: {
+      shared: false,
+      x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+      y: {
+        formatter: (val, opts) => {
+          const idx = opts.dataPointIndex;
+          const mv = uplinks[idx]?.meter_value;
+          const snr = uplinks[idx]?.snr;
+          const parts = [val == null ? '—' : `${Math.round(val)} dBm`];
+          if (snr != null) parts.push(`SNR ${Number(snr).toFixed(1)} dB`);
+          if (mv != null) parts.push(`Zähler ${Number(mv).toFixed(2).replace('.', ',')}`);
+          return parts.join(' | ');
         }
       }
+    },
+    legend: { show: true, labels: { colors: '#C9D1D9' } }
+  };
 
-      for (const k of keys) {
-        const kl = k.toLowerCase();
-        for (const c of candidates) {
-          if (kl.endsWith(`.${c.toLowerCase()}`) || kl === c.toLowerCase()) {
-            const v = getByPath(obj, k);
-            if (v != null) return v;
-          }
-        }
-      }
-      return null;
-    }
+  if (chartRssi) { chartRssi.updateOptions(options); }
+  else { chartRssi = new ApexCharts($('chartRssi'), options); chartRssi.render(); }
+}
 
-    function getByPath(obj, path) {
-      if (!obj || !path) return null;
-      const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
-      let cur = obj;
-      for (const p of parts) {
-        if (cur == null) return null;
-        cur = cur[p];
-      }
-      return typeof cur === 'number' && Number.isFinite(cur) ? cur : null;
-    }
+// =================== PAYLOAD EXPLORER ===================
+function flattenNumericFields(obj, prefix = '', out = {}) {
+  if (!obj || typeof obj !== 'object') return out;
+  if (Array.isArray(obj)) { obj.forEach((v, i) => flattenNumericFields(v, `${prefix}[${i}]`, out)); return out; }
+  Object.entries(obj).forEach(([k, v]) => {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (typeof v === 'number' && Number.isFinite(v)) { out[key] = true; return; }
+    if (v && typeof v === 'object') flattenNumericFields(v, key, out);
+  });
+  return out;
+}
 
-    async function loadPayloadExplorer() {
-      const devEui = devSel.value;
-      if (!devEui) return;
+function getByPath(obj, path) {
+  if (!obj || !path) return null;
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+  let cur = obj;
+  for (const p of parts) { if (cur == null) return null; cur = cur[p]; }
+  return typeof cur === 'number' && Number.isFinite(cur) ? cur : null;
+}
 
-      const days = Number(daysEl.value || 30);
-      const uplinks = await fetchUplinksWindow(devEui, days);
-      if (!uplinks.length) {
-        payloadMeta.textContent = 'Letzter Uplink Payload: —';
-        payloadJson.textContent = '—';
-        return;
-      }
-
-      const latest = uplinks[uplinks.length - 1];
-      payloadMeta.textContent = `Letzter Uplink Payload @ ${new Date(latest.at).toLocaleString('de-DE')}`;
-      payloadJson.textContent = JSON.stringify(latest.decoded_json || latest.payload_json || {}, null, 2);
-
-      const fieldsMap = {};
-      uplinks.forEach((u) => {
-        flattenNumericFields(u.decoded_json, '', fieldsMap);
-        flattenNumericFields(u.payload_json, '', fieldsMap);
-      });
-      const fields = Object.keys(fieldsMap).sort();
-
-      const prev = fieldSel.value;
-      fieldSel.innerHTML = '';
-      fields.forEach((f) => {
-        const o = document.createElement('option');
-        o.value = f;
-        o.textContent = f;
-        fieldSel.appendChild(o);
-      });
-
-      if (fields.length === 0) {
-        const o = document.createElement('option');
-        o.value = '';
-        o.textContent = 'Keine numerischen Felder im decoded_payload';
-        fieldSel.appendChild(o);
-      } else if (fields.includes(prev)) {
-        fieldSel.value = prev;
-      }
-
-      const selected = fieldSel.value;
-      if (!selected) return;
-
-      const labels = uplinks.map((u) => u.at);
-      const data = uplinks.map((u) => {
-        const d = getByPath(u.decoded_json, selected);
-        if (d != null) return d;
-        return getByPath(u.payload_json, selected);
-      });
-
-      const options = {
-        chart: {
-          type: 'line',
-          height: 260,
-          animations: { enabled: isDesktop() },
-          toolbar: { show: true },
-          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
-        },
-        series: [{ name: selected, data }],
-        xaxis: { type: 'datetime', categories: labels },
-        stroke: { width: 2, curve: 'smooth' },
-        dataLabels: { enabled: false },
-        tooltip: {
-          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
-          y: { formatter: v => (v == null ? '—' : String(v)) }
-        },
-        legend: { show: true }
-      };
-
-      if (chartField) {
-        chartField.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
-      } else {
-        chartField = new ApexCharts(document.querySelector('#chartField'), options);
-        chartField.render();
+function findNumericByCandidates(obj, candidates) {
+  if (!obj || typeof obj !== 'object') return null;
+  const keys = Object.keys(flattenNumericFields(obj));
+  const lowerMap = Object.fromEntries(keys.map(k => [k.toLowerCase(), k]));
+  for (const c of candidates) {
+    const direct = lowerMap[c.toLowerCase()];
+    if (direct) { const v = getByPath(obj, direct); if (v != null) return v; }
+  }
+  for (const k of keys) {
+    const kl = k.toLowerCase();
+    for (const c of candidates) {
+      if (kl.endsWith(`.${c.toLowerCase()}`) || kl === c.toLowerCase()) {
+        const v = getByPath(obj, k); if (v != null) return v;
       }
     }
+  }
+  return null;
+}
 
-    async function loadImuSeries() {
-      const devEui = devSel.value;
-      if (!devEui) return;
-      const days = Number(daysEl.value || 30);
+async function loadPayloadExplorer() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const uplinks = await fetchUplinksWindow(currentDevEui, days);
+  const fieldSel = $('fieldSel');
 
-      const uplinks = await fetchUplinksWindow(devEui, days);
-      if (!uplinks.length) return;
+  if (!uplinks.length) {
+    $('payloadMeta').textContent = 'Letzter Uplink-Payload: —';
+    $('payloadJson').textContent = '—';
+    return;
+  }
 
-      const labels = uplinks.map(u => u.at);
-      const ax = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ax', 'ax', 'acc_x', 'accx', 'imu.ax', 'accelerometer.x', 'acceleration.x']));
-      const ay = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ay', 'ay', 'acc_y', 'accy', 'imu.ay', 'accelerometer.y', 'acceleration.y']));
-      const az = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_az', 'az', 'acc_z', 'accz', 'imu.az', 'accelerometer.z', 'acceleration.z']));
+  const latest = uplinks[uplinks.length - 1];
+  $('payloadMeta').textContent = `Letzter Uplink-Payload @ ${new Date(latest.at).toLocaleString('de-DE')}`;
+  $('payloadJson').textContent = JSON.stringify(latest.decoded_json || latest.payload_json || {}, null, 2);
 
-      if (![ax, ay, az].some(arr => arr.some(v => v != null))) return;
+  const fieldsMap = {};
+  uplinks.forEach(u => { flattenNumericFields(u.decoded_json, '', fieldsMap); flattenNumericFields(u.payload_json, '', fieldsMap); });
+  const fields = Object.keys(fieldsMap).sort();
+  const prev = fieldSel.value;
+  fieldSel.innerHTML = '';
+  fields.forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; fieldSel.appendChild(o); });
 
-      const options = {
-        chart: {
-          type: 'line',
-          height: 280,
-          animations: { enabled: isDesktop() },
-          toolbar: { show: true },
-          zoom: { enabled: true, type: 'x', autoScaleYaxis: true }
-        },
-        series: [
-          { name: 'ax', data: ax },
-          { name: 'ay', data: ay },
-          { name: 'az', data: az }
-        ],
-        xaxis: { type: 'datetime', categories: labels },
-        stroke: { width: 2, curve: 'smooth' },
-        dataLabels: { enabled: false },
-        tooltip: {
-          shared: true,
-          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
-        },
-        legend: { show: true }
-      };
+  if (!fields.length) {
+    const o = document.createElement('option'); o.value = ''; o.textContent = 'Keine numerischen Felder'; fieldSel.appendChild(o);
+  } else if (fields.includes(prev)) {
+    fieldSel.value = prev;
+  }
 
-      if (chartImu) {
-        chartImu.updateOptions({ ...options, chart: { ...options.chart, animations: { enabled: isDesktop() } } });
-      } else {
-        chartImu = new ApexCharts(document.querySelector('#chartImu'), options);
-        chartImu.render();
-      }
-    }
+  const selected = fieldSel.value;
+  if (!selected) return;
 
-    function buildExportUrl(format) {
-      const devEui = devSel.value;
-      const fromIso = toIsoFromLocalDatetime(fromDt.value);
-      const toIso = toIsoFromLocalDatetime(toDt.value);
-      const q = new URLSearchParams({ devEui, format });
-      if (fromIso) q.set('from', fromIso);
-      if (toIso) q.set('to', toIso);
-      return `/api/export?${q.toString()}`;
-    }
+  const labels = uplinks.map(u => u.at);
+  const data = uplinks.map(u => getByPath(u.decoded_json, selected) ?? getByPath(u.payload_json, selected));
 
-    async function refreshAll() {
-      const devEui = devSel.value;
-      if (!devEui) return;
-      statusEl.textContent = 'Lade…';
+  const options = {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, type: 'line', height: 260, toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
+    series: [{ name: selected, data }],
+    xaxis: { type: 'datetime', categories: labels },
+    stroke: { width: 2, curve: 'smooth' },
+    dataLabels: { enabled: false },
+    tooltip: {
+      x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+      y: { formatter: v => (v == null ? '—' : String(v)) }
+    },
+    legend: { show: true, labels: { colors: '#C9D1D9' } }
+  };
+
+  if (chartField) { chartField.updateOptions(options); }
+  else { chartField = new ApexCharts($('chartField'), options); chartField.render(); }
+}
+
+// =================== CHART: IMU ===================
+async function loadImuSeries() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const uplinks = await fetchUplinksWindow(currentDevEui, days);
+  if (!uplinks.length) return;
+
+  const labels = uplinks.map(u => u.at);
+  const ax = uplinks.map(u => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ax', 'ax', 'acc_x', 'accx', 'imu.ax', 'accelerometer.x']));
+  const ay = uplinks.map(u => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ay', 'ay', 'acc_y', 'accy', 'imu.ay', 'accelerometer.y']));
+  const az = uplinks.map(u => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_az', 'az', 'acc_z', 'accz', 'imu.az', 'accelerometer.z']));
+  if (![ax, ay, az].some(arr => arr.some(v => v != null))) return;
+
+  const options = {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, type: 'line', height: 280, toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
+    series: [{ name: 'ax', data: ax }, { name: 'ay', data: ay }, { name: 'az', data: az }],
+    xaxis: { type: 'datetime', categories: labels },
+    stroke: { width: 2, curve: 'smooth' },
+    dataLabels: { enabled: false },
+    tooltip: { shared: true, x: { formatter: v => new Date(v).toLocaleString('de-DE') } },
+    legend: { show: true, labels: { colors: '#C9D1D9' } }
+  };
+
+  if (chartImu) { chartImu.updateOptions(options); }
+  else { chartImu = new ApexCharts($('chartImu'), options); chartImu.render(); }
+}
+
+// =================== EXPORT HELPERS ===================
+function buildExportUrl(format) {
+  const fromIso = toIsoFromLocalDatetime($('fromDt').value);
+  const toIso = toIsoFromLocalDatetime($('toDt').value);
+  const q = new URLSearchParams({ devEui: currentDevEui, format });
+  if (fromIso) q.set('from', fromIso);
+  if (toIso) q.set('to', toIso);
+  return `/api/export?${q.toString()}`;
+}
+
+// =================== EVENT HANDLERS ===================
+$('refresh').addEventListener('click', refreshDetail);
+$('setNow').addEventListener('click', setNowDateInputs);
+$('fieldSel').addEventListener('change', loadPayloadExplorer);
+
+$('countTx').addEventListener('click', async () => {
+  if (!currentDevEui) return;
+  const fromIso = toIsoFromLocalDatetime($('fromDt').value);
+  const toIso = toIsoFromLocalDatetime($('toDt').value);
+  if (!fromIso || !toIso) { $('txOut').textContent = 'Bitte gültigen Zeitraum wählen.'; return; }
+  const j = await (await fetch(`/api/tx-count?devEui=${encodeURIComponent(currentDevEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`)).json();
+  $('txOut').textContent = `Uploads: ${j.count} (${new Date(fromIso).toLocaleString('de-DE')} – ${new Date(toIso).toLocaleString('de-DE')})`;
+  showToast(`${j.count} Uploads im Zeitraum`, 'info');
+});
+
+$('deleteRange').addEventListener('click', async () => {
+  if (!currentDevEui) return;
+  const fromIso = toIsoFromLocalDatetime($('fromDt').value);
+  const toIso = toIsoFromLocalDatetime($('toDt').value);
+  const source = $('deleteSource').value || 'both';
+  if (!fromIso || !toIso) { $('txOut').textContent = 'Bitte Zeitraum wählen.'; return; }
+  if (!confirm(`Bereich löschen für ${currentDevEui}?\nQuelle: ${source}\n${new Date(fromIso).toLocaleString('de-DE')} – ${new Date(toIso).toLocaleString('de-DE')}`)) return;
+  const url = `/api/data-range?devEui=${encodeURIComponent(currentDevEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&source=${encodeURIComponent(source)}`;
+  const res = await fetch(url, { method: 'DELETE' });
+  if (!res.ok) { showToast(`Fehler: HTTP ${res.status}`, 'error'); return; }
+  const j = await res.json();
+  $('txOut').textContent = `Gelöscht: readings=${j.readingsDeleted}, uplinks=${j.uplinksDeleted}`;
+  showToast(`${j.readingsDeleted + j.uplinksDeleted} Datenpunkte gelöscht`, 'success');
+  refreshDetail();
+});
+
+$('deletePoint').addEventListener('click', async () => {
+  if (!currentDevEui) return;
+  const atIso = toIsoFromLocalDatetime($('pointDt').value);
+  const source = $('deleteSource').value || 'both';
+  if (!atIso) { $('txOut').textContent = 'Bitte Zeitpunkt wählen.'; return; }
+  if (!confirm(`Punkt löschen für ${currentDevEui}?\n${new Date(atIso).toLocaleString('de-DE')}`)) return;
+  const url = `/api/data-point?devEui=${encodeURIComponent(currentDevEui)}&at=${encodeURIComponent(atIso)}&source=${encodeURIComponent(source)}`;
+  const res = await fetch(url, { method: 'DELETE' });
+  if (!res.ok) { showToast(`Fehler: HTTP ${res.status}`, 'error'); return; }
+  const j = await res.json();
+  showToast('Datenpunkt gelöscht', 'success');
+  refreshDetail();
+});
+
+$('downloadJson').addEventListener('click', () => { if (currentDevEui) window.open(buildExportUrl('json'), '_blank'); });
+$('downloadCsv').addEventListener('click', () => { if (currentDevEui) window.open(buildExportUrl('csv'), '_blank'); });
+
+$('deleteDevice').addEventListener('click', async () => {
+  if (!currentDevEui) return;
+  if (!confirm(`Gerät ${currentDevEui} wirklich löschen?\nAlle Daten werden unwiderruflich entfernt!`)) return;
+  const res = await fetch(`/api/devices/${encodeURIComponent(currentDevEui)}`, { method: 'DELETE' });
+  if (!res.ok) { showToast(`Fehler: HTTP ${res.status}`, 'error'); return; }
+  showToast('Gerät gelöscht', 'success');
+  currentDevEui = null;
+  showPage('overview');
+});
+
+// =================== SSE AUTO-UPDATE ===================
+function startSse() {
+  try {
+    const es = new EventSource('/events');
+    es.onmessage = (ev) => {
       try {
-        await loadLast();
-        await loadDailySeries();
-        await loadBatterySeries();
-        await loadRssiSeries();
-        await loadPayloadExplorer();
-        await loadImuSeries();
-      } finally {
-        statusEl.textContent = '';
-      }
-    }
-
-    document.getElementById('refresh').addEventListener('click', refreshAll);
-    setNowBtn.addEventListener('click', () => setNowDateInputs());
-
-    devSel.addEventListener('change', refreshAll);
-    fieldSel.addEventListener('change', loadPayloadExplorer);
-
-    document.getElementById('countTx').addEventListener('click', async () => {
-      const devEui = devSel.value;
-      if (!devEui) return;
-
-      const fromIso = toIsoFromLocalDatetime(fromDt.value);
-      const toIso = toIsoFromLocalDatetime(toDt.value);
-
-      if (!fromIso || !toIso) {
-        txOut.textContent = 'Bitte gültigen Zeitraum wählen.';
-        return;
-      }
-
-      const j = await (await fetch(`/api/tx-count?devEui=${encodeURIComponent(devEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}`)).json();
-      txOut.textContent = `Uploads: ${j.count} (von ${new Date(fromIso).toLocaleString('de-DE')} bis ${new Date(toIso).toLocaleString('de-DE')})`;
-    });
-
-    document.getElementById('deleteRange').addEventListener('click', async () => {
-      const devEui = devSel.value;
-      if (!devEui) return;
-
-      const fromIso = toIsoFromLocalDatetime(fromDt.value);
-      const toIso = toIsoFromLocalDatetime(toDt.value);
-      const source = deleteSource.value || 'both';
-
-      if (!fromIso || !toIso) {
-        txOut.textContent = 'Bitte gültigen Zeitraum zum Löschen wählen.';
-        return;
-      }
-
-      const ok = window.confirm(`Range löschen für ${devEui}? Quelle: ${source}, von ${new Date(fromIso).toLocaleString('de-DE')} bis ${new Date(toIso).toLocaleString('de-DE')}`);
-      if (!ok) return;
-
-      const url = `/api/data-range?devEui=${encodeURIComponent(devEui)}&from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&source=${encodeURIComponent(source)}`;
-      const res = await fetch(url, { method: 'DELETE' });
-      if (!res.ok) {
-        txOut.textContent = `Fehler beim Löschen der Range: HTTP ${res.status}`;
-        return;
-      }
-      const j = await res.json();
-      txOut.textContent = `Gelöscht (Range): readings=${j.readingsDeleted}, uplinks=${j.uplinksDeleted}`;
-      await refreshAll();
-    });
-
-    document.getElementById('deletePoint').addEventListener('click', async () => {
-      const devEui = devSel.value;
-      if (!devEui) return;
-
-      const atIso = toIsoFromLocalDatetime(pointDt.value);
-      const source = deleteSource.value || 'both';
-
-      if (!atIso) {
-        txOut.textContent = 'Bitte gültigen Zeitpunkt zum Löschen wählen.';
-        return;
-      }
-
-      const ok = window.confirm(`Einzelnen Punkt löschen für ${devEui}? Quelle: ${source}, Zeitpunkt ${new Date(atIso).toLocaleString('de-DE')}`);
-      if (!ok) return;
-
-      const url = `/api/data-point?devEui=${encodeURIComponent(devEui)}&at=${encodeURIComponent(atIso)}&source=${encodeURIComponent(source)}`;
-      const res = await fetch(url, { method: 'DELETE' });
-      if (!res.ok) {
-        txOut.textContent = `Fehler beim Löschen des Punkts: HTTP ${res.status}`;
-        return;
-      }
-      const j = await res.json();
-      txOut.textContent = `Gelöscht (Punkt): readings=${j.readingsDeleted}, uplinks=${j.uplinksDeleted}`;
-      await refreshAll();
-    });
-
-    downloadJsonBtn.addEventListener('click', () => {
-      const devEui = devSel.value;
-      if (!devEui) return;
-      window.open(buildExportUrl('json'), '_blank');
-    });
-
-    downloadCsvBtn.addEventListener('click', () => {
-      const devEui = devSel.value;
-      if (!devEui) return;
-      window.open(buildExportUrl('csv'), '_blank');
-    });
-
-    deleteDeviceBtn.addEventListener('click', async () => {
-      const devEui = devSel.value;
-      if (!devEui) return;
-      const ok = window.confirm(`Gerät ${devEui} wirklich löschen? Alle Daten (Readings + Uplinks) werden entfernt.`);
-      if (!ok) return;
-
-      const res = await fetch(`/api/devices/${encodeURIComponent(devEui)}`, { method: 'DELETE' });
-      if (!res.ok) {
-        alert(`Fehler beim Löschen: HTTP ${res.status}`);
-        return;
-      }
-
-      await loadDevices();
-      await refreshAll();
-    });
-
-    // Auto-update via SSE
-    function startSse() {
-      try {
-        const es = new EventSource('/events');
-        es.onmessage = (ev) => {
-          try {
-            const msg = JSON.parse(ev.data || '{}');
-            if (msg.type === 'up' && msg.devEui && msg.devEui === devSel.value) {
-              refreshAll();
-            }
-          } catch {}
-        };
-        es.onerror = () => {
-          // silent; browser retries
-        };
+        const msg = JSON.parse(ev.data || '{}');
+        if (msg.type === 'up') {
+          if ($('pageOverview').classList.contains('active')) loadOverview();
+          if (msg.devEui === currentDevEui && $('pageDetail').classList.contains('active')) refreshDetail();
+          showToast(`Uplink von ${msg.devEui?.slice(-8) || '?'}`, 'success');
+        }
       } catch {}
-    }
+    };
+    es.onerror = () => {};
+  } catch {}
+}
 
-    (async () => {
-      setDefaultRangeHours(24);
-      await loadDevices();
-      await refreshAll();
-      startSse();
-    })();
-  </script>
+// =================== INIT ===================
+(async () => {
+  setDefaultRangeHours(24);
+  await loadOverview();
+  startSse();
+})();
+</script>
 </body>
 </html>

@@ -16,6 +16,7 @@ import {
   exportDeviceData,
   deleteDataPoint,
   deleteDataRange,
+  getDeviceSummaries,
 } from "./db.js";
 
 dotenv.config();
@@ -478,6 +479,8 @@ app.get("/debug/last", (_req, res) => res.json({ lastEvents }));
 
 // REST API
 app.get("/api/devices", (_req, res) => res.json({ devices: listDevices() }));
+
+app.get("/api/device-summaries", (_req, res) => res.json({ devices: getDeviceSummaries() }));
 
 app.get("/api/readings", (req, res) => {
   const devEui = String(req.query.devEui || "");
