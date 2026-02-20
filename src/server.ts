@@ -41,6 +41,9 @@ const EXPECTED_TOKEN = process.env.CHIRPSTACK_WEBHOOK_TOKEN || "";
 const PORT = Number(process.env.PORT || 8000);
 const DEFAULT_TZ = process.env.UI_TIMEZONE || "Europe/Berlin";
 const DEFAULT_DAYS = Number(process.env.UI_DAYS || "30");
+const TTN_DOWNLINK_API_KEY = process.env.TTN_DOWNLINK_API_KEY || "";
+const TTN_API_BASE = (process.env.TTN_API_BASE || "https://eu1.cloud.thethings.network").replace(/\/$/, "");
+const TTN_DEFAULT_F_PORT = Number(process.env.TTN_DEFAULT_F_PORT || "15");
 
 // ---- helpers ----
 const HEX16 = /^[0-9a-fA-F]{16}$/;
@@ -547,6 +550,84 @@ app.get("/api/tx-count", (req, res) => {
   const to = String(req.query.to || "");
   if (!from || !to) return res.status(400).json({ error: "from and to are required (ISO timestamps)" });
   res.json({ devEui, from, to, count: countTx(devEui, from, to) });
+});
+
+app.post("/api/downlink/upload-interval", async (req, res) => {
+  const devEui = String(req.body?.devEui || "").trim().toLowerCase();
+  const minutes = Number(req.body?.minutes);
+  const fPortRaw = req.body?.fPort ?? TTN_DEFAULT_F_PORT;
+  const fPort = Number(fPortRaw);
+
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!Number.isFinite(minutes) || minutes < 1) {
+    return res.status(400).json({ error: "minutes must be a positive number (minutes)" });
+  }
+  if (!Number.isInteger(fPort) || fPort < 1 || fPort > 255) {
+    return res.status(400).json({ error: "fPort must be an integer between 1 and 255" });
+  }
+  if (!TTN_DOWNLINK_API_KEY) {
+    return res.status(500).json({ error: "Server missing TTN_DOWNLINK_API_KEY" });
+  }
+
+  const last = getLastUplink(devEui);
+  const applicationId = String(req.body?.applicationId || last?.application_id || "").trim();
+  const deviceId = String(req.body?.deviceId || last?.device_name || "").trim();
+
+  if (!applicationId || !deviceId) {
+    return res.status(400).json({
+      error: "Could not resolve TTN identifiers. Need applicationId and deviceId (from latest uplink or request body).",
+      devEui,
+      applicationId: applicationId || null,
+      deviceId: deviceId || null,
+    });
+  }
+
+  const ttnUrl = `${TTN_API_BASE}/api/v3/as/applications/${encodeURIComponent(applicationId)}/devices/${encodeURIComponent(deviceId)}/down/push`;
+  const payload = {
+    downlinks: [
+      {
+        f_port: fPort,
+        confirmed: true,
+        decoded_payload: { upload_interval: Math.round(minutes) },
+      },
+    ],
+  };
+
+  try {
+    const r = await fetch(ttnUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${TTN_DOWNLINK_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const body = await r.text();
+      return res.status(502).json({
+        error: "TTN downlink request failed",
+        status: r.status,
+        details: body.slice(0, 800),
+      });
+    }
+
+    let responseJson: unknown = null;
+    try { responseJson = await r.json(); } catch {}
+
+    return res.json({
+      ok: true,
+      devEui,
+      applicationId,
+      deviceId,
+      minutes: Math.round(minutes),
+      fPort,
+      confirmed: true,
+      ttn: responseJson,
+    });
+  } catch (err: any) {
+    return res.status(502).json({ error: "Failed to call TTN downlink API", details: String(err?.message || err) });
+  }
 });
 
 app.delete("/api/devices/:devEui", (req, res) => {

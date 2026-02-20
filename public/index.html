@@ -571,6 +571,11 @@
       <input id="days" type="number" min="1" max="365" value="30" style="width:70px" />
       <label>Zeitzone</label>
       <input id="tz" type="text" value="Europe/Berlin" style="width:140px" />
+      <label>Upload-Intervall (min)</label>
+      <input id="uploadIntervalMin" type="number" min="1" step="1" value="1" style="width:90px" />
+      <label>fPort</label>
+      <input id="downlinkFPort" type="number" min="1" max="255" step="1" value="15" style="width:70px" />
+      <button class="btn btn-primary" id="setUploadInterval">Intervall setzen</button>
       <button class="btn btn-primary" id="refresh">Aktualisieren</button>
     </div>
 
@@ -1370,6 +1375,37 @@ function buildExportUrl(format) {
 $('refresh').addEventListener('click', refreshDetail);
 $('setNow').addEventListener('click', setNowDateInputs);
 $('fieldSel').addEventListener('change', loadPayloadExplorer);
+
+$('setUploadInterval').addEventListener('click', async () => {
+  if (!currentDevEui) return;
+  const minutes = Number($('uploadIntervalMin').value || 0);
+  const fPort = Number($('downlinkFPort').value || 15);
+
+  if (!Number.isFinite(minutes) || minutes < 1) {
+    showToast('Bitte ein gültiges Upload-Intervall in Minuten eingeben', 'error');
+    return;
+  }
+  if (!Number.isInteger(fPort) || fPort < 1 || fPort > 255) {
+    showToast('fPort muss zwischen 1 und 255 liegen', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/downlink/upload-interval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ devEui: currentDevEui, minutes, fPort }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(j?.error ? `Downlink fehlgeschlagen: ${j.error}` : `Downlink fehlgeschlagen (HTTP ${res.status})`, 'error');
+      return;
+    }
+    showToast(`Upload-Intervall auf ${Math.round(minutes)} min gesetzt (confirmed, fPort ${fPort})`, 'success');
+  } catch (err) {
+    showToast('Downlink konnte nicht gesendet werden', 'error');
+  }
+});
 
 $('countTx').addEventListener('click', async () => {
   if (!currentDevEui) return;
