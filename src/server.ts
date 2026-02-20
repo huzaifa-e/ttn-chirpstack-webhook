@@ -583,12 +583,14 @@ app.post("/api/downlink/upload-interval", async (req, res) => {
   }
 
   const ttnUrl = `${TTN_API_BASE}/api/v3/as/applications/${encodeURIComponent(applicationId)}/devices/${encodeURIComponent(deviceId)}/down/push`;
+  const downlinkObj = { upload_interval: Math.round(minutes) };
+  const frmPayload = Buffer.from(JSON.stringify(downlinkObj), "utf8").toString("base64");
   const payload = {
     downlinks: [
       {
         f_port: fPort,
         confirmed: true,
-        decoded_payload: { upload_interval: Math.round(minutes) },
+        frm_payload: frmPayload,
       },
     ],
   };
@@ -623,6 +625,7 @@ app.post("/api/downlink/upload-interval", async (req, res) => {
       minutes: Math.round(minutes),
       fPort,
       confirmed: true,
+      frm_payload: frmPayload,
       ttn: responseJson,
     });
   } catch (err: any) {
