@@ -798,6 +798,10 @@ async function loadOverview() {
     const barC = rssiToBarColor(dev.rssi);
     const interval = formatInterval(dev.avg_interval_seconds);
     const name = dev.device_name || 'Unbenannt';
+    const meterRaw = dev.meter_value_raw != null ? String(dev.meter_value_raw) : null;
+    const meterDisplay = meterRaw && meterRaw.trim() !== ''
+      ? meterRaw
+      : (dev.meter_value != null ? String(dev.meter_value).replace('.', ',') : null);
     const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#E53E3E';
     const ledCol = status === 'active' ? '#2DD55B' : status === 'inactive' ? '#E53E3E' : '#F5A623';
 
@@ -815,7 +819,7 @@ async function loadOverview() {
           </svg>
         </div>
         <div class="device-card-body">
-          <div class="device-card-meter" id="meter-${dev.dev_eui}">${dev.meter_value != null ? `${Number(dev.meter_value).toFixed(2).replace('.', ',')}<span class="meter-unit">m³</span>` : '<span style="color:var(--ttn-gray);font-size:14px;font-weight:500">Kein Zählerstand</span>'}</div>
+          <div class="device-card-meter" id="meter-${dev.dev_eui}">${meterDisplay != null ? `${meterDisplay}<span class="meter-unit">m³</span>` : '<span style="color:var(--ttn-gray);font-size:14px;font-weight:500">Kein Zählerstand</span>'}</div>
           <div class="device-card-header">
             <span class="device-card-name">${name}</span>
             <span class="device-card-status status-${status}">

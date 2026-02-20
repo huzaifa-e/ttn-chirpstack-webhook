@@ -193,7 +193,7 @@ const stmtListDevices = db.prepare(`
 `);
 
 const stmtLastReading = db.prepare(`
-  SELECT dev_eui, at, meter_value, battery_mv, rssi, snr
+  SELECT dev_eui, at, meter_value, meter_value_raw, battery_mv, rssi, snr
   FROM readings
   WHERE dev_eui = ?
   ORDER BY at DESC
@@ -439,6 +439,7 @@ export interface DeviceSummary {
   avg_interval_seconds: number | null;
   first_seen: string | null;
   meter_value: number | null;
+  meter_value_raw: string | null;
 }
 
 export function getDeviceSummaries(): DeviceSummary[] {
@@ -471,6 +472,7 @@ export function getDeviceSummaries(): DeviceSummary[] {
       avg_interval_seconds: avgInterval,
       first_seen: stats?.first_at ?? null,
       meter_value: lastRead?.meter_value ?? null,
+      meter_value_raw: lastRead?.meter_value_raw ?? null,
     });
   }
   return summaries;
