@@ -228,6 +228,22 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .device-card-meter {
+      font-weight: 700;
+      font-size: 22px;
+      color: var(--ttn-accent);
+      letter-spacing: -.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+    .device-card-meter .meter-unit {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ttn-gray);
+      margin-left: 2px;
+    }
     .device-card-eui {
       font-size: 12px;
       font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
@@ -367,7 +383,8 @@
     .btn-success:hover { background: rgba(45,213,91,.2); }
 
     /* Chart cards */
-    .chart-grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    .chart-card-full { grid-column: 1 / -1; }
     .chart-card {
       background: var(--ttn-card); border: 1px solid var(--ttn-border);
       border-radius: var(--radius); padding: 20px;
@@ -406,6 +423,7 @@
     /* Responsive */
     @media (max-width: 768px) {
       .device-grid { grid-template-columns: 1fr; }
+      .chart-grid { grid-template-columns: 1fr; }
       .topbar { padding: 0 12px; }
       .main-container { padding: 16px; }
       .detail-hero { flex-direction: column; align-items: flex-start; }
@@ -540,6 +558,13 @@
       </div>
     </div>
 
+    <!-- Last Uplink Payload -->
+    <div class="chart-card" style="margin-bottom:20px">
+      <div class="chart-card-header"><span class="chart-card-title">Letzter Uplink-Payload</span></div>
+      <div class="chart-card-subtitle" id="payloadMeta" style="margin-top:0;margin-bottom:8px">—</div>
+      <pre class="payload-pre" id="payloadJson">—</pre>
+    </div>
+
     <!-- Controls -->
     <div class="controls-bar">
       <label>Tage</label>
@@ -583,9 +608,19 @@
         <div class="chart-card-subtitle">Balken = Tagesverbrauch · Linie = Zählerstand (Tagesschluss)</div>
       </div>
       <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Stündlicher Verbrauch</span></div>
+        <div id="chartHourly"></div>
+        <div class="chart-card-subtitle">Verbrauch pro Stunde (interpoliert aus Zählerstand)</div>
+      </div>
+      <div class="chart-card">
         <div class="chart-card-header"><span class="chart-card-title">Batteriespannung (mV)</span></div>
         <div id="chartBattery"></div>
         <div class="chart-card-subtitle">Zoom: Bereich markieren · Tooltip zeigt Batterie + Zähler</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">Stündlicher Batterieverbrauch</span></div>
+        <div id="chartHourlyBattery"></div>
+        <div class="chart-card-subtitle">Batterie-Änderung pro Stunde (mV/h)</div>
       </div>
       <div class="chart-card">
         <div class="chart-card-header"><span class="chart-card-title">RSSI über Zeit</span></div>
@@ -593,19 +628,17 @@
         <div class="chart-card-subtitle">Signal-Stärke (dBm) · Tooltip zeigt RSSI, SNR und Zähler</div>
       </div>
       <div class="chart-card">
+        <div class="chart-card-header"><span class="chart-card-title">IMU Position (ax / ay / az)</span></div>
+        <div id="chartImu"></div>
+        <div class="chart-card-subtitle">Beschleunigungssensor-Daten (imu_ax, imu_ay, imu_az)</div>
+      </div>
+      <div class="chart-card chart-card-full">
         <div class="chart-card-header"><span class="chart-card-title">Payload Explorer</span></div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
           <label style="font-size:12px;color:var(--ttn-gray)">Feld:</label>
           <select id="fieldSel" style="flex:1;max-width:300px"></select>
         </div>
         <div id="chartField"></div>
-        <div class="chart-card-subtitle" id="payloadMeta">Letzter Uplink-Payload:</div>
-        <pre class="payload-pre" id="payloadJson">—</pre>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">IMU Position (ax / ay / az)</span></div>
-        <div id="chartImu"></div>
-        <div class="chart-card-subtitle">Beschleunigungssensor-Daten (imu_ax, imu_ay, imu_az)</div>
       </div>
     </div>
   </div>
@@ -617,7 +650,7 @@
 // =================== GLOBALS ===================
 let currentDevEui = null;
 let deviceSummaries = [];
-let chartDaily, chartBattery, chartRssi, chartField, chartImu;
+let chartDaily, chartBattery, chartRssi, chartField, chartImu, chartHourly, chartHourlyBattery;
 
 const $ = (id) => document.getElementById(id);
 const isDesktop = () => window.innerWidth > 800;
@@ -782,6 +815,7 @@ async function loadOverview() {
           </svg>
         </div>
         <div class="device-card-body">
+          <div class="device-card-meter" id="meter-${dev.dev_eui}">${dev.meter_value != null ? `${Number(dev.meter_value).toFixed(2).replace('.', ',')}<span class="meter-unit">m³</span>` : '<span style="color:var(--ttn-gray);font-size:14px;font-weight:500">Kein Zählerstand</span>'}</div>
           <div class="device-card-header">
             <span class="device-card-name">${name}</span>
             <span class="device-card-status status-${status}">
@@ -929,7 +963,9 @@ async function refreshDetail() {
   try {
     await Promise.all([
       loadDailySeries(),
+      loadHourlySeries(),
       loadBatterySeries(),
+      loadHourlyBatterySeries(),
       loadRssiSeries(),
       loadPayloadExplorer(),
       loadImuSeries(),
@@ -997,6 +1033,105 @@ async function loadDailySeries() {
 
   if (chartDaily) { chartDaily.updateOptions(options); }
   else { chartDaily = new ApexCharts($('chartDaily'), options); chartDaily.render(); }
+}
+
+// =================== CHART: HOURLY CONSUMPTION ===================
+async function loadHourlySeries() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const uplinks = await fetchUplinksWindow(currentDevEui, days);
+  if (!uplinks.length) return;
+
+  // Bucket meter readings by hour
+  const byHour = {};
+  uplinks.forEach(u => {
+    if (u.meter_value == null) return;
+    const d = new Date(u.at);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:00`;
+    if (!byHour[key]) byHour[key] = { first: u.meter_value, last: u.meter_value };
+    byHour[key].last = u.meter_value;
+  });
+
+  const hours = Object.keys(byHour).sort();
+  if (hours.length < 2) return;
+
+  const labels = [];
+  const data = [];
+  for (let i = 1; i < hours.length; i++) {
+    const cons = byHour[hours[i]].last - byHour[hours[i-1]].first;
+    labels.push(hours[i]);
+    data.push(cons >= 0 ? Math.round(cons * 1000) / 1000 : 0);
+  }
+
+  const options = {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, type: 'bar', height: 340, toolbar: { show: true }, zoom: { enabled: true, type: 'x' } },
+    series: [{ name: 'Verbrauch/h', data }],
+    plotOptions: { bar: { borderRadius: 2, columnWidth: '70%' } },
+    xaxis: { type: 'datetime', categories: labels },
+    yaxis: { title: { text: 'm³/h', style: { color: '#8B949E' } }, labels: { formatter: v => Number(v || 0).toFixed(3).replace('.', ',') } },
+    dataLabels: { enabled: false },
+    tooltip: {
+      x: { formatter: v => new Date(v).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+      y: { formatter: v => (v == null ? '—' : Number(v).toFixed(3).replace('.', ',') + ' m³') }
+    },
+    legend: { show: false }
+  };
+
+  if (chartHourly) { chartHourly.updateOptions(options); }
+  else { chartHourly = new ApexCharts($('chartHourly'), options); chartHourly.render(); }
+}
+
+// =================== CHART: HOURLY BATTERY CONSUMPTION ===================
+async function loadHourlyBatterySeries() {
+  if (!currentDevEui) return;
+  const days = Number($('days').value || 30);
+  const uplinks = await fetchUplinksWindow(currentDevEui, days);
+  if (!uplinks.length) return;
+
+  // Bucket battery readings by hour
+  const byHour = {};
+  uplinks.forEach(u => {
+    if (u.battery_mv == null) return;
+    const d = new Date(u.at);
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:00`;
+    if (!byHour[key]) byHour[key] = { first: u.battery_mv, last: u.battery_mv };
+    byHour[key].last = u.battery_mv;
+  });
+
+  const hours = Object.keys(byHour).sort();
+  if (hours.length < 2) return;
+
+  const labels = [];
+  const data = [];
+  for (let i = 1; i < hours.length; i++) {
+    const delta = byHour[hours[i]].last - byHour[hours[i-1]].first;
+    labels.push(hours[i]);
+    data.push(Math.round(delta * 10) / 10);
+  }
+
+  const options = {
+    ...darkTheme,
+    chart: { ...darkTheme.chart, type: 'bar', height: 300, toolbar: { show: true }, zoom: { enabled: true, type: 'x' } },
+    series: [{ name: 'Batterie Δ/h', data }],
+    plotOptions: {
+      bar: { borderRadius: 2, columnWidth: '70%',
+        colors: { ranges: [{ from: -99999, to: -0.01, color: '#E53E3E' }, { from: 0, to: 99999, color: '#2DD55B' }] }
+      }
+    },
+    colors: ['#8B949E'],
+    xaxis: { type: 'datetime', categories: labels },
+    yaxis: { title: { text: 'mV/h', style: { color: '#8B949E' } }, labels: { formatter: v => (v == null ? '—' : String(Math.round(v))) } },
+    dataLabels: { enabled: false },
+    tooltip: {
+      x: { formatter: v => new Date(v).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) },
+      y: { formatter: v => (v == null ? '—' : `${Math.round(v)} mV`) }
+    },
+    legend: { show: false }
+  };
+
+  if (chartHourlyBattery) { chartHourlyBattery.updateOptions(options); }
+  else { chartHourlyBattery = new ApexCharts($('chartHourlyBattery'), options); chartHourlyBattery.render(); }
 }
 
 // =================== FETCH UPLINKS ===================

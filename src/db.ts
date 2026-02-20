@@ -438,6 +438,7 @@ export interface DeviceSummary {
   total_uplinks: number;
   avg_interval_seconds: number | null;
   first_seen: string | null;
+  meter_value: number | null;
 }
 
 export function getDeviceSummaries(): DeviceSummary[] {
@@ -446,6 +447,7 @@ export function getDeviceSummaries(): DeviceSummary[] {
 
   for (const d of devices) {
     const lastUp = stmtLastUplink.get(d.dev_eui) as UplinkRow | undefined;
+    const lastRead = stmtLastReading.get(d.dev_eui) as any | undefined;
     const stats = db.prepare(`
       SELECT COUNT(*) AS cnt, MIN(at) AS first_at, MAX(at) AS last_at
       FROM uplinks WHERE dev_eui = ?
@@ -468,6 +470,7 @@ export function getDeviceSummaries(): DeviceSummary[] {
       total_uplinks: stats?.cnt ?? 0,
       avg_interval_seconds: avgInterval,
       first_seen: stats?.first_at ?? null,
+      meter_value: lastRead?.meter_value ?? null,
     });
   }
   return summaries;
