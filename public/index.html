@@ -200,9 +200,9 @@
       box-shadow: var(--shadow);
     }
     .device-card-image {
-      width: 80px;
-      height: 80px;
+      width: 90px;
       flex-shrink: 0;
+      align-self: stretch;
       border-radius: var(--radius-sm);
       background: linear-gradient(135deg, #1a2332, #263245);
       display: flex;
@@ -231,7 +231,7 @@
     .device-card-meter {
       font-weight: 700;
       font-size: 22px;
-      color: var(--ttn-accent);
+      color: #fff;
       letter-spacing: -.5px;
       white-space: nowrap;
       overflow: hidden;
@@ -272,9 +272,9 @@
     .status-inactive .status-dot { background: var(--ttn-red); }
 
     .device-card-metrics {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
       margin-top: 8px;
     }
     .metric-item {
@@ -798,20 +798,20 @@ async function loadOverview() {
     const barC = rssiToBarColor(dev.rssi);
     const interval = formatInterval(dev.avg_interval_seconds);
     const name = dev.device_name || 'Unbenannt';
-    const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#30363D';
-    const ledCol = status === 'active' ? '#2DD55B' : '#30363D';
+    const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#E53E3E';
+    const ledCol = status === 'active' ? '#2DD55B' : status === 'inactive' ? '#E53E3E' : '#F5A623';
 
     return `
       <div class="device-card" onclick="openDevice('${dev.dev_eui}')">
         <div class="device-card-image">
-          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;height:56px">
+          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
             <rect x="14" y="6" width="36" height="52" rx="6" fill="#1a2332" stroke="${strokeCol}" stroke-width="2"/>
             <circle cx="32" cy="22" r="9" fill="#0D1117" stroke="${strokeCol}" stroke-width="1.5"/>
             <path d="M28 11h8" stroke="#30363D" stroke-width="2" stroke-linecap="round"/>
             <rect x="24" y="36" width="16" height="3" rx="1.5" fill="#263245"/>
             <rect x="24" y="41" width="12" height="3" rx="1.5" fill="#263245"/>
             <rect x="24" y="46" width="14" height="3" rx="1.5" fill="#263245"/>
-            ${status === 'active' ? `<circle cx="32" cy="22" r="4" fill="rgba(45,213,91,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : `<circle cx="32" cy="22" r="2" fill="${ledCol}"/>`}
+            ${status === 'active' ? `<circle cx="32" cy="22" r="4" fill="rgba(45,213,91,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : status === 'inactive' ? `<circle cx="32" cy="22" r="4" fill="rgba(229,62,62,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : `<circle cx="32" cy="22" r="2" fill="${ledCol}"/>`}
           </svg>
         </div>
         <div class="device-card-body">
