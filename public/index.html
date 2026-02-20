@@ -42,6 +42,7 @@
     <label>Zeitraum:</label>
     <input id="fromDt" type="datetime-local" />
     <input id="toDt" type="datetime-local" />
+    <button id="setNow">Now</button>
     <label>Quelle:</label>
     <select id="deleteSource">
       <option value="both">beide</option>
@@ -107,6 +108,7 @@
     const fromDt = document.getElementById('fromDt');
     const toDt = document.getElementById('toDt');
     const pointDt = document.getElementById('pointDt');
+    const setNowBtn = document.getElementById('setNow');
     const deleteSource = document.getElementById('deleteSource');
     const txOut = document.getElementById('txOut');
     const fieldSel = document.getElementById('fieldSel');
@@ -141,6 +143,14 @@
         return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       };
       fromDt.value = f(from);
+      toDt.value = f(now);
+      pointDt.value = f(now);
+    }
+
+    function setNowDateInputs() {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const f = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       toDt.value = f(now);
       pointDt.value = f(now);
     }
@@ -533,9 +543,9 @@
       if (!uplinks.length) return;
 
       const labels = uplinks.map(u => u.at);
-      const ax = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['ax', 'acc_x', 'accx', 'imu.ax', 'accelerometer.x', 'acceleration.x']));
-      const ay = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['ay', 'acc_y', 'accy', 'imu.ay', 'accelerometer.y', 'acceleration.y']));
-      const az = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['az', 'acc_z', 'accz', 'imu.az', 'accelerometer.z', 'acceleration.z']));
+      const ax = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ax', 'ax', 'acc_x', 'accx', 'imu.ax', 'accelerometer.x', 'acceleration.x']));
+      const ay = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_ay', 'ay', 'acc_y', 'accy', 'imu.ay', 'accelerometer.y', 'acceleration.y']));
+      const az = uplinks.map((u) => findNumericByCandidates(u.decoded_json || u.payload_json, ['imu_az', 'az', 'acc_z', 'accz', 'imu.az', 'accelerometer.z', 'acceleration.z']));
 
       if (![ax, ay, az].some(arr => arr.some(v => v != null))) return;
 
@@ -597,6 +607,7 @@
     }
 
     document.getElementById('refresh').addEventListener('click', refreshAll);
+    setNowBtn.addEventListener('click', () => setNowDateInputs());
 
     devSel.addEventListener('change', refreshAll);
     fieldSel.addEventListener('change', loadPayloadExplorer);
