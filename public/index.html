@@ -656,6 +656,7 @@
 let currentDevEui = null;
 let deviceSummaries = [];
 let chartDaily, chartBattery, chartRssi, chartField, chartImu, chartHourly, chartHourlyBattery;
+const EXPECTED_UPLINKS_PER_CHARGE = 12000;
 
 const $ = (id) => document.getElementById(id);
 const isDesktop = () => window.innerWidth > 800;
@@ -746,6 +747,79 @@ function formatInterval(seconds) {
   return `${(seconds / 86400).toFixed(1)} d`;
 }
 
+function formatLifetime(seconds) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '—';
+  const min = Math.round(seconds / 60);
+  if (min < 60) return `${min} min`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 48) return `${hrs} h`;
+  const days = Math.round(hrs / 24);
+  if (days < 365) return `${days} d`;
+  const years = (days / 365).toFixed(1);
+  return `${years} y`;
+}
+
+function escapeHtmlAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildLifetimeHoverText(dev) {
+  const total = Number(dev?.total_uplinks || 0);
+  const remainingUplinks = Math.max(0, EXPECTED_UPLINKS_PER_CHARGE - total);
+  const standardIntervals = [
+    { min: 1, label: '1 min' },
+    { min: 10, label: '10 min' },
+    { min: 30, label: '30 min' },
+    { min: 60, label: '60 min' },
+    { min: 360, label: '6 h' },
+    { min: 720, label: '12 h' },
+  ];
+  const currentSec = Number(dev?.avg_interval_seconds || 0);
+
+  const lines = [
+    `Verbraucht: ${total} Uplinks`,
+    `Rest: ${remainingUplinks} Uplinks`,
+    '',
+    'Alternative Upload-Intervalle:',
+  ];
+
+  let alternatives = standardIntervals;
+  if (Number.isFinite(currentSec) && currentSec > 0) {
+    lines.unshift(`Aktuell (${formatInterval(currentSec)}): ${formatLifetime(remainingUplinks * currentSec)}`);
+    alternatives = standardIntervals.filter(({ min }) => (min * 60) > currentSec);
+  }
+
+  alternatives.slice(0, 3).forEach(({ min, label }) => {
+    lines.push(`${label}: ${formatLifetime(remainingUplinks * min * 60)}`);
+  });
+
+  if (!alternatives.length) lines.push('Keine höheren Standard-Intervalle');
+
+  return lines.join('\n');
+}
+
+function estimateLifetime(dev) {
+  const total = Number(dev?.total_uplinks || 0);
+  const intervalSec = Number(dev?.avg_interval_seconds || 0);
+  if (!Number.isFinite(intervalSec) || intervalSec <= 0) {
+    return { text: '—', healthClass: '' };
+  }
+
+  const remainingUplinks = Math.max(0, EXPECTED_UPLINKS_PER_CHARGE - total);
+  const remainingSec = remainingUplinks * intervalSec;
+  const ratio = remainingUplinks / EXPECTED_UPLINKS_PER_CHARGE;
+  const healthClass = ratio > 0.5 ? 'health-good' : ratio > 0.2 ? 'health-warn' : 'health-bad';
+
+  return {
+    text: `${formatLifetime(remainingSec)} (${remainingUplinks})`,
+    healthClass,
+  };
+}
+
 function timeAgo(iso) {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
@@ -802,6 +876,8 @@ async function loadOverview() {
     const barW = rssiToBarWidth(dev.rssi);
     const barC = rssiToBarColor(dev.rssi);
     const interval = formatInterval(dev.avg_interval_seconds);
+    const life = estimateLifetime(dev);
+    const lifeHover = escapeHtmlAttr(buildLifetimeHoverText(dev));
     const name = dev.device_name || 'Unbenannt';
     const meterRaw = dev.meter_value_raw != null ? String(dev.meter_value_raw) : null;
     const meterDisplay = meterRaw && meterRaw.trim() !== ''
@@ -857,6 +933,10 @@ async function loadOverview() {
             <div class="metric-item">
               <span class="metric-icon"></span>
               <span class="metric-val">${dev.total_uplinks} Uplinks</span>
+            </div>
+            <div class="metric-item ${life.healthClass}" title="${lifeHover}">
+              <span class="metric-icon"></span>
+              <span class="metric-val">Restlaufzeit: ${life.text}</span>
             </div>
           </div>
         </div>
