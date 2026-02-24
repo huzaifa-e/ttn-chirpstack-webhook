@@ -21,7 +21,10 @@ services:
     restart: unless-stopped
     depends_on:
       - app
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --config /etc/cloudflared/config.yaml run
+    volumes:
+      - ./cloudflared.yaml:/etc/cloudflared/config.yaml:ro
+      - ./cloudflared-credentials.json:/etc/cloudflared/credentials.json:ro
 
 volumes:
   emoni_data:

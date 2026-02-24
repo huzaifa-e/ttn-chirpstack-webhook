@@ -1,0 +1,9 @@
+# Cloudflare Tunnel – locally-managed config
+# The tunnel ID and credentials file are filled in during server setup.
+tunnel: 85ec6a21-3485-4ef0-b89b-9ed2b5511c76
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: lorawan.emoni.cloud
+    service: http://app:8000
+  - service: http_status:404

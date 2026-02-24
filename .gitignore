@@ -4,6 +4,9 @@
 !.env.example
 !.env.ngrok.example
 
+# Cloudflare Tunnel credentials (secret – created on server)
+cloudflared-credentials.json
+
 # TLS / private keys
 *.key
 *.pem
