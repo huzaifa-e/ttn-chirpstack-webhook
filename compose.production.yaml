@@ -1,0 +1,27 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: emoni-lorawan:latest
+    container_name: emoni-lorawan
+    restart: unless-stopped
+    environment:
+      - PORT=8000
+      - DB_PATH=/app/data/data.db
+      - CHIRPSTACK_WEBHOOK_TOKEN=${CHIRPSTACK_WEBHOOK_TOKEN:-}
+      - UI_TIMEZONE=${UI_TIMEZONE:-Europe/Berlin}
+      - UI_DAYS=${UI_DAYS:-30}
+    volumes:
+      - emoni_data:/app/data
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: emoni-tunnel
+    restart: unless-stopped
+    depends_on:
+      - app
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+
+volumes:
+  emoni_data:
