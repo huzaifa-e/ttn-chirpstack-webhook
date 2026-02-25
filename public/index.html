@@ -181,6 +181,37 @@
       grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
       gap: 16px;
     }
+    .device-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+    .device-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .device-group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .device-group-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -.2px;
+      color: var(--ttn-gray-light);
+    }
+    .device-group-count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ttn-gray);
+      padding: 4px 10px;
+      border: 1px solid var(--ttn-border);
+      border-radius: 999px;
+      background: var(--ttn-card);
+    }
     .device-card {
       background: var(--ttn-card);
       border: 1px solid var(--ttn-border);
@@ -289,6 +320,22 @@
     .metric-item.health-good .metric-val { color: var(--ttn-green); }
     .metric-item.health-warn .metric-val { color: var(--ttn-yellow); }
     .metric-item.health-bad .metric-val  { color: var(--ttn-red); }
+    .device-type-select {
+      min-width: 170px;
+      max-width: 100%;
+      font-size: 12px;
+      padding: 4px 8px;
+      background: var(--ttn-dark);
+      color: var(--ttn-gray-light);
+      border: 1px solid var(--ttn-border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .device-type-select:focus {
+      outline: none;
+      border-color: var(--ttn-accent);
+      box-shadow: 0 0 0 2px rgba(67,97,238,.2);
+    }
 
     .rssi-bar-bg {
       height: 4px; background: var(--ttn-border); border-radius: 2px;
@@ -490,7 +537,7 @@
         <div class="stat-pill"><span>Inaktiv</span> <span class="num" id="statInactive" style="color:var(--ttn-red)">0</span></div>
       </div>
     </div>
-    <div id="deviceGrid" class="device-grid"></div>
+    <div id="deviceGroups" class="device-groups"></div>
     <div id="emptyState" class="empty-state" style="display:none">
       <div class="icon"></div>
       <h3>Keine Geräte gefunden</h3>
@@ -657,9 +704,83 @@ let currentDevEui = null;
 let deviceSummaries = [];
 let chartDaily, chartBattery, chartRssi, chartField, chartImu, chartHourly, chartHourlyBattery;
 const EXPECTED_UPLINKS_PER_CHARGE = 12000;
+const DEVICE_TYPE_ORDER = ['gas', 'electricity_ferraris', 'electricity_sml', 'water', 'unknown'];
+const DEVICE_TYPE_META = {
+  gas: { label: 'Gas Geräte', unit: 'm³' },
+  electricity_ferraris: { label: 'Strom Geräte (Ferraris)', unit: 'kWh' },
+  electricity_sml: { label: 'Strom Geräte (SML/Digital)', unit: 'kWh' },
+  water: { label: 'Wasser Geräte', unit: 'm³' },
+  unknown: { label: 'Ohne Typ', unit: 'm³' },
+};
 
 const $ = (id) => document.getElementById(id);
 const isDesktop = () => window.innerWidth > 800;
+
+function normalizeDeviceType(v) {
+  return Object.hasOwn(DEVICE_TYPE_META, v) ? v : 'unknown';
+}
+
+let deviceTypeMap = {};
+
+async function loadDeviceTypesFromApi() {
+  try {
+    const resp = await fetch('/api/device-types');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const j = await resp.json();
+    const raw = j?.deviceTypes;
+    const out = {};
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw)) {
+        out[k] = normalizeDeviceType(v);
+      }
+    }
+    deviceTypeMap = out;
+  } catch (err) {
+    console.warn('Failed to load device types:', err);
+    deviceTypeMap = {};
+  }
+}
+
+function getDeviceType(devEui) {
+  return normalizeDeviceType(deviceTypeMap?.[devEui]);
+}
+
+async function setDeviceType(devEui, type) {
+  const normalizedType = normalizeDeviceType(type);
+  const previous = getDeviceType(devEui);
+  deviceTypeMap = { ...deviceTypeMap, [devEui]: normalizedType };
+
+  try {
+    const resp = await fetch(`/api/device-types/${encodeURIComponent(devEui)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceType: normalizedType }),
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  } catch (err) {
+    deviceTypeMap = { ...deviceTypeMap, [devEui]: previous };
+    throw err;
+  }
+}
+
+function buildDeviceTypeOptions(selectedType) {
+  const selected = normalizeDeviceType(selectedType);
+  return DEVICE_TYPE_ORDER.map((type) => {
+    const label = DEVICE_TYPE_META[type]?.label || type;
+    return `<option value="${type}" ${selected === type ? 'selected' : ''}>${label}</option>`;
+  }).join('');
+}
+
+async function onDeviceTypeChange(event, devEui) {
+  event?.stopPropagation?.();
+  try {
+    await setDeviceType(devEui, event?.target?.value);
+    loadOverview();
+  } catch (err) {
+    showToast('Gerätetyp konnte nicht gespeichert werden', 'error');
+  }
+}
 
 // =================== NAVIGATION ===================
 function showPage(page) {
@@ -836,7 +957,10 @@ function timeAgo(iso) {
 // =================== OVERVIEW PAGE ===================
 async function loadOverview() {
   try {
-    const resp = await fetch('/api/device-summaries');
+    const [_, resp] = await Promise.all([
+      loadDeviceTypesFromApi(),
+      fetch('/api/device-summaries')
+    ]);
     const j = await resp.json();
     deviceSummaries = j.devices || [];
   } catch (err) {
@@ -844,7 +968,7 @@ async function loadOverview() {
     return;
   }
 
-  const grid = $('deviceGrid');
+  const groupsRoot = $('deviceGroups');
   const empty = $('emptyState');
   $('deviceCountBadge').textContent = deviceSummaries.length;
   $('statTotal').textContent = deviceSummaries.length;
@@ -861,87 +985,116 @@ async function loadOverview() {
   $('statInactive').textContent = inactive;
 
   if (!deviceSummaries.length) {
-    grid.innerHTML = '';
+    groupsRoot.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
 
   empty.style.display = 'none';
-  grid.innerHTML = deviceSummaries.map(dev => {
-    const status = getDeviceStatus(dev);
-    const statusLabel = getStatusLabel(status);
-    const battHealth = getBatteryHealth(dev.battery_mv);
-    const battPct = getBatteryPercent(dev.battery_mv);
-    const dist = rssiToDistance(dev.rssi);
-    const barW = rssiToBarWidth(dev.rssi);
-    const barC = rssiToBarColor(dev.rssi);
-    const interval = formatInterval(dev.avg_interval_seconds);
-    const life = estimateLifetime(dev);
-    const lifeHover = escapeHtmlAttr(buildLifetimeHoverText(dev));
-    const name = dev.device_name || 'Unbenannt';
-    const meterRaw = dev.meter_value_raw != null ? String(dev.meter_value_raw) : null;
-    const meterDisplay = meterRaw && meterRaw.trim() !== ''
-      ? meterRaw
-      : (dev.meter_value != null ? String(dev.meter_value).replace('.', ',') : null);
-    const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#E53E3E';
-    const ledCol = status === 'active' ? '#2DD55B' : status === 'inactive' ? '#E53E3E' : '#F5A623';
+  const grouped = { gas: [], electricity_ferraris: [], electricity_sml: [], water: [], unknown: [] };
+  deviceSummaries.forEach((dev) => {
+    const type = getDeviceType(dev.dev_eui);
+    grouped[type].push(dev);
+  });
 
-    return `
-      <div class="device-card" onclick="openDevice('${dev.dev_eui}')">
-        <div class="device-card-image">
-          <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
-            <rect x="14" y="6" width="36" height="52" rx="6" fill="#1a2332" stroke="${strokeCol}" stroke-width="2"/>
-            <circle cx="32" cy="22" r="9" fill="#0D1117" stroke="${strokeCol}" stroke-width="1.5"/>
-            <path d="M28 11h8" stroke="#30363D" stroke-width="2" stroke-linecap="round"/>
-            <rect x="24" y="36" width="16" height="3" rx="1.5" fill="#263245"/>
-            <rect x="24" y="41" width="12" height="3" rx="1.5" fill="#263245"/>
-            <rect x="24" y="46" width="14" height="3" rx="1.5" fill="#263245"/>
-            ${status === 'active' ? `<circle cx="32" cy="22" r="4" fill="rgba(45,213,91,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : status === 'inactive' ? `<circle cx="32" cy="22" r="4" fill="rgba(229,62,62,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : `<circle cx="32" cy="22" r="2" fill="${ledCol}"/>`}
-          </svg>
-        </div>
-        <div class="device-card-body">
-          <div class="device-card-meter" id="meter-${dev.dev_eui}">${meterDisplay != null ? `${meterDisplay}<span class="meter-unit">m³</span>` : '<span style="color:var(--ttn-gray);font-size:14px;font-weight:500">Kein Zählerstand</span>'}</div>
-          <div class="device-card-header">
-            <span class="device-card-name">${name}</span>
-            <span class="device-card-status status-${status}">
-              <span class="status-dot"></span> ${statusLabel}
-            </span>
+  groupsRoot.innerHTML = DEVICE_TYPE_ORDER
+    .filter((type) => grouped[type]?.length)
+    .map((type) => {
+      const meta = DEVICE_TYPE_META[type] || DEVICE_TYPE_META.unknown;
+      const cards = grouped[type].map((dev) => {
+        const status = getDeviceStatus(dev);
+        const statusLabel = getStatusLabel(status);
+        const battHealth = getBatteryHealth(dev.battery_mv);
+        const battPct = getBatteryPercent(dev.battery_mv);
+        const dist = rssiToDistance(dev.rssi);
+        const barW = rssiToBarWidth(dev.rssi);
+        const barC = rssiToBarColor(dev.rssi);
+        const interval = formatInterval(dev.avg_interval_seconds);
+        const life = estimateLifetime(dev);
+        const lifeHover = escapeHtmlAttr(buildLifetimeHoverText(dev));
+        const name = dev.device_name || 'Unbenannt';
+        const devType = getDeviceType(dev.dev_eui);
+        const meterUnit = DEVICE_TYPE_META[devType]?.unit || 'm³';
+        const meterRaw = dev.meter_value_raw != null ? String(dev.meter_value_raw) : null;
+        const meterDisplay = meterRaw && meterRaw.trim() !== ''
+          ? meterRaw
+          : (dev.meter_value != null ? String(dev.meter_value).replace('.', ',') : null);
+        const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#E53E3E';
+        const ledCol = status === 'active' ? '#2DD55B' : status === 'inactive' ? '#E53E3E' : '#F5A623';
+
+        return `
+          <div class="device-card" onclick="openDevice('${dev.dev_eui}')">
+            <div class="device-card-image">
+              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+                <rect x="14" y="6" width="36" height="52" rx="6" fill="#1a2332" stroke="${strokeCol}" stroke-width="2"/>
+                <circle cx="32" cy="22" r="9" fill="#0D1117" stroke="${strokeCol}" stroke-width="1.5"/>
+                <path d="M28 11h8" stroke="#30363D" stroke-width="2" stroke-linecap="round"/>
+                <rect x="24" y="36" width="16" height="3" rx="1.5" fill="#263245"/>
+                <rect x="24" y="41" width="12" height="3" rx="1.5" fill="#263245"/>
+                <rect x="24" y="46" width="14" height="3" rx="1.5" fill="#263245"/>
+                ${status === 'active' ? `<circle cx="32" cy="22" r="4" fill="rgba(45,213,91,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : status === 'inactive' ? `<circle cx="32" cy="22" r="4" fill="rgba(229,62,62,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : `<circle cx="32" cy="22" r="2" fill="${ledCol}"/>`}
+              </svg>
+            </div>
+            <div class="device-card-body">
+              <div class="device-card-meter" id="meter-${dev.dev_eui}">${meterDisplay != null ? `${meterDisplay}<span class="meter-unit">${meterUnit}</span>` : '<span style="color:var(--ttn-gray);font-size:14px;font-weight:500">Kein Zählerstand</span>'}</div>
+              <div class="device-card-header">
+                <span class="device-card-name">${name}</span>
+                <span class="device-card-status status-${status}">
+                  <span class="status-dot"></span> ${statusLabel}
+                </span>
+              </div>
+              <div class="device-card-eui">${dev.dev_eui}</div>
+              <div class="device-card-metrics">
+                <div class="metric-item ${battHealth === 'good' ? 'health-good' : battHealth === 'warn' ? 'health-warn' : battHealth === 'bad' ? 'health-bad' : ''}">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">${dev.battery_mv != null ? `${dev.battery_mv} mV${battPct != null ? ` (${battPct}%)` : ''}` : '—'}</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">${dev.rssi != null ? `${dev.rssi} dBm` : '—'}</span>
+                  <div class="rssi-bar-bg"><div class="rssi-bar-fill" style="width:${barW}%;background:${barC}"></div></div>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">${interval}</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">${dist || '—'}</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">${timeAgo(dev.last_seen)}</span>
+                </div>
+                <div class="metric-item">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">${dev.total_uplinks} Uplinks</span>
+                </div>
+                <div class="metric-item ${life.healthClass}" title="${lifeHover}">
+                  <span class="metric-icon"></span>
+                  <span class="metric-val">Restlaufzeit: ${life.text}</span>
+                </div>
+                <div class="metric-item" onclick="event.stopPropagation()">
+                  <span class="metric-icon"></span>
+                  <select class="device-type-select" onclick="event.stopPropagation()" onchange="onDeviceTypeChange(event, '${dev.dev_eui}')">
+                    ${buildDeviceTypeOptions(devType)}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      return `
+        <section class="device-group">
+          <div class="device-group-header">
+            <h3 class="device-group-title">${meta.label}</h3>
+            <span class="device-group-count">${grouped[type].length}</span>
           </div>
-          <div class="device-card-eui">${dev.dev_eui}</div>
-          <div class="device-card-metrics">
-            <div class="metric-item ${battHealth === 'good' ? 'health-good' : battHealth === 'warn' ? 'health-warn' : battHealth === 'bad' ? 'health-bad' : ''}">
-              <span class="metric-icon"></span>
-              <span class="metric-val">${dev.battery_mv != null ? `${dev.battery_mv} mV${battPct != null ? ` (${battPct}%)` : ''}` : '—'}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-icon"></span>
-              <span class="metric-val">${dev.rssi != null ? `${dev.rssi} dBm` : '—'}</span>
-              <div class="rssi-bar-bg"><div class="rssi-bar-fill" style="width:${barW}%;background:${barC}"></div></div>
-            </div>
-            <div class="metric-item">
-              <span class="metric-icon"></span>
-              <span class="metric-val">${interval}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-icon"></span>
-              <span class="metric-val">${dist || '—'}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-icon"></span>
-              <span class="metric-val">${timeAgo(dev.last_seen)}</span>
-            </div>
-            <div class="metric-item">
-              <span class="metric-icon"></span>
-              <span class="metric-val">${dev.total_uplinks} Uplinks</span>
-            </div>
-            <div class="metric-item ${life.healthClass}" title="${lifeHover}">
-              <span class="metric-icon"></span>
-              <span class="metric-val">Restlaufzeit: ${life.text}</span>
-            </div>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
+          <div class="device-grid">${cards}</div>
+        </section>`;
+    })
+    .join('');
 }
 
 function openDevice(devEui) {

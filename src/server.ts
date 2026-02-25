@@ -17,6 +17,9 @@ import {
   deleteDataPoint,
   deleteDataRange,
   getDeviceSummaries,
+  listDeviceTypes,
+  setDeviceType,
+  normalizeDeviceType,
 } from "./db.js";
 
 dotenv.config();
@@ -484,6 +487,20 @@ app.get("/debug/last", (_req, res) => res.json({ lastEvents }));
 app.get("/api/devices", (_req, res) => res.json({ devices: listDevices() }));
 
 app.get("/api/device-summaries", (_req, res) => res.json({ devices: getDeviceSummaries() }));
+
+app.get("/api/device-types", (_req, res) => {
+  res.json({ deviceTypes: listDeviceTypes() });
+});
+
+app.put("/api/device-types/:devEui", (req, res) => {
+  const devEui = String(req.params.devEui || "").trim().toLowerCase();
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+
+  const rawType = req.body?.deviceType;
+  const deviceType = normalizeDeviceType(rawType);
+  setDeviceType(devEui, deviceType);
+  return res.json({ devEui, deviceType });
+});
 
 app.get("/api/readings", (req, res) => {
   const devEui = String(req.query.devEui || "");

@@ -46,6 +46,14 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_uplinks_dev_at ON uplinks(dev_eui, at);`
 db.exec(`DROP INDEX IF EXISTS idx_uplinks_dedup;`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_uplinks_dev_dedup ON uplinks(dev_eui, deduplication_id);`);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS device_settings (
+    dev_eui TEXT PRIMARY KEY,
+    device_type TEXT NOT NULL DEFAULT 'unknown',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+
 function columnExists(table: string, col: string): boolean {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as any[];
   return rows.some(r => String(r.name) === col);
@@ -232,6 +240,74 @@ const stmtDeleteUplinksForDevice = db.prepare(`
   WHERE dev_eui = ?
 `);
 
+const stmtDeleteSettingsForDevice = db.prepare(`
+  DELETE FROM device_settings
+  WHERE dev_eui = ?
+`);
+
+const stmtSetDeviceType = db.prepare(`
+  INSERT INTO device_settings (dev_eui, device_type, updated_at)
+  VALUES (@dev_eui, @device_type, @updated_at)
+  ON CONFLICT(dev_eui) DO UPDATE SET
+    device_type = excluded.device_type,
+    updated_at = excluded.updated_at
+`);
+
+const stmtGetDeviceType = db.prepare(`
+  SELECT dev_eui, device_type
+  FROM device_settings
+  WHERE dev_eui = ?
+`);
+
+const stmtListDeviceTypes = db.prepare(`
+  SELECT dev_eui, device_type
+  FROM device_settings
+`);
+
+export type DeviceType = "gas" | "water" | "electricity_ferraris" | "electricity_sml" | "unknown";
+
+const DEVICE_TYPES: readonly DeviceType[] = [
+  "gas",
+  "water",
+  "electricity_ferraris",
+  "electricity_sml",
+  "unknown",
+];
+
+export function normalizeDeviceType(input: unknown): DeviceType {
+  const v = String(input ?? "").trim().toLowerCase();
+  return (DEVICE_TYPES as readonly string[]).includes(v) ? (v as DeviceType) : "unknown";
+}
+
+export function setDeviceType(devEui: string, deviceType: unknown): DeviceType {
+  const normalizedDevEui = String(devEui || "").trim().toLowerCase();
+  const normalizedType = normalizeDeviceType(deviceType);
+  if (!normalizedDevEui) return normalizedType;
+
+  stmtSetDeviceType.run({
+    dev_eui: normalizedDevEui,
+    device_type: normalizedType,
+    updated_at: new Date().toISOString(),
+  });
+
+  return normalizedType;
+}
+
+export function getDeviceType(devEui: string): DeviceType {
+  const row = stmtGetDeviceType.get(String(devEui || "").trim().toLowerCase()) as { device_type?: string } | undefined;
+  return normalizeDeviceType(row?.device_type ?? "unknown");
+}
+
+export function listDeviceTypes(): Record<string, DeviceType> {
+  const rows = stmtListDeviceTypes.all() as Array<{ dev_eui: string; device_type: string }>;
+  const out: Record<string, DeviceType> = {};
+  for (const row of rows) {
+    if (!row?.dev_eui) continue;
+    out[row.dev_eui] = normalizeDeviceType(row.device_type);
+  }
+  return out;
+}
+
 export function storeReading(input: StoreReadingInput): void {
   const dev_eui = input.dev_eui;
   const at = input.at;
@@ -380,6 +456,7 @@ export function getLastUplink(devEui: string): UplinkRow | null {
 export function deleteDevice(devEui: string): { readingsDeleted: number; uplinksDeleted: number } {
   const infoReadings = stmtDeleteReadingsForDevice.run(devEui);
   const infoUplinks = stmtDeleteUplinksForDevice.run(devEui);
+  stmtDeleteSettingsForDevice.run(devEui);
   return {
     readingsDeleted: Number(infoReadings.changes || 0),
     uplinksDeleted: Number(infoUplinks.changes || 0),
