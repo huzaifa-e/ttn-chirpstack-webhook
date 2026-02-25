@@ -294,13 +294,15 @@
     }
     .status-active { background: rgba(45, 213, 91, .12); color: var(--ttn-green); }
     .status-warning { background: rgba(245, 166, 35, .12); color: var(--ttn-yellow); }
-    .status-inactive { background: rgba(229, 62, 62, .12); color: var(--ttn-red); }
+    .status-offline { background: rgba(229, 62, 62, .12); color: var(--ttn-red); }
+    .status-inactive { background: rgba(139, 148, 158, .16); color: var(--ttn-gray-light); }
     .status-dot {
       width: 6px; height: 6px; border-radius: 50%; display: inline-block;
     }
     .status-active .status-dot { background: var(--ttn-green); }
     .status-warning .status-dot { background: var(--ttn-yellow); }
-    .status-inactive .status-dot { background: var(--ttn-red); }
+    .status-offline .status-dot { background: var(--ttn-red); }
+    .status-inactive .status-dot { background: var(--ttn-gray-light); }
 
     .device-card-metrics {
       display: grid;
@@ -720,6 +722,55 @@ function normalizeDeviceType(v) {
   return Object.hasOwn(DEVICE_TYPE_META, v) ? v : 'unknown';
 }
 
+function getDeviceTypeColorByStatus(deviceType, status) {
+  if (status === 'inactive') {
+    return { bg: '#232a33', stroke: '#8B949E', icon: '#8B949E' };
+  }
+  if (status === 'offline') {
+    return { bg: '#2A1717', stroke: '#E53E3E', icon: '#E53E3E' };
+  }
+  if (deviceType === 'gas') {
+    return { bg: '#15261B', stroke: '#2DD55B', icon: '#2DD55B' };
+  }
+  if (deviceType === 'water') {
+    return { bg: '#162236', stroke: '#39A0FF', icon: '#39A0FF' };
+  }
+  if (deviceType === 'electricity_ferraris' || deviceType === 'electricity_sml') {
+    return { bg: '#2B240E', stroke: '#F5A623', icon: '#F5A623' };
+  }
+  return { bg: '#1a2332', stroke: '#8B949E', icon: '#8B949E' };
+}
+
+function getDeviceTypeIconSvg(deviceType, status) {
+  const palette = getDeviceTypeColorByStatus(deviceType, status);
+  if (deviceType === 'gas') {
+    return `
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+        <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
+        <path d="M32 14c2 7-5 10-5 17 0 4 2.8 7 5.8 7s5.2-2.2 5.2-5.3c0-4.3-4.2-7.2-3.1-12.7 5.6 3.4 9.1 9.3 9.1 15.4 0 7-5.2 13.6-12 13.6S20 42.5 20 35.5c0-7.4 4.8-14.8 12-21.5Z" fill="${palette.icon}"/>
+      </svg>`;
+  }
+  if (deviceType === 'water') {
+    return `
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+        <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
+        <path d="M32 12c-7.6 10.3-14 17.3-14 24.3C18 44.9 24.3 50 32 50s14-5.1 14-13.7C46 29.3 39.6 22.3 32 12Z" fill="${palette.icon}"/>
+      </svg>`;
+  }
+  if (deviceType === 'electricity_ferraris' || deviceType === 'electricity_sml') {
+    return `
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+        <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
+        <path d="M36 10 21 35h10l-3 19 15-25H33l3-19Z" fill="${palette.icon}"/>
+      </svg>`;
+  }
+  return `
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+      <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
+      <circle cx="32" cy="32" r="8" fill="${palette.icon}"/>
+    </svg>`;
+}
+
 let deviceTypeMap = {};
 
 async function loadDeviceTypesFromApi() {
@@ -813,16 +864,17 @@ function getDeviceStatus(dev) {
   if (!dev.last_seen) return 'inactive';
   const ago = Date.now() - new Date(dev.last_seen).getTime();
   const interval = dev.avg_interval_seconds ? dev.avg_interval_seconds * 1000 : 3600_000;
-  // Active if last seen within 3x interval; warning within 6x; otherwise inactive
+  // Active if last seen within 3x interval; warning within 6x; otherwise offline
   if (ago < interval * 3) return 'active';
   if (ago < interval * 6) return 'warning';
-  return 'inactive';
+  return 'offline';
 }
 
 function getStatusLabel(status) {
   if (status === 'active') return 'Online';
   if (status === 'warning') return 'Verzögert';
-  return 'Offline';
+  if (status === 'offline') return 'Offline';
+  return 'Inaktiv';
 }
 
 function getBatteryHealth(mv) {
@@ -1019,21 +1071,12 @@ async function loadOverview() {
         const meterDisplay = meterRaw && meterRaw.trim() !== ''
           ? meterRaw
           : (dev.meter_value != null ? String(dev.meter_value).replace('.', ',') : null);
-        const strokeCol = status === 'active' ? '#2DD55B' : status === 'warning' ? '#F5A623' : '#E53E3E';
-        const ledCol = status === 'active' ? '#2DD55B' : status === 'inactive' ? '#E53E3E' : '#F5A623';
+        const typeIcon = getDeviceTypeIconSvg(devType, status);
 
         return `
           <div class="device-card" onclick="openDevice('${dev.dev_eui}')">
             <div class="device-card-image">
-              <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
-                <rect x="14" y="6" width="36" height="52" rx="6" fill="#1a2332" stroke="${strokeCol}" stroke-width="2"/>
-                <circle cx="32" cy="22" r="9" fill="#0D1117" stroke="${strokeCol}" stroke-width="1.5"/>
-                <path d="M28 11h8" stroke="#30363D" stroke-width="2" stroke-linecap="round"/>
-                <rect x="24" y="36" width="16" height="3" rx="1.5" fill="#263245"/>
-                <rect x="24" y="41" width="12" height="3" rx="1.5" fill="#263245"/>
-                <rect x="24" y="46" width="14" height="3" rx="1.5" fill="#263245"/>
-                ${status === 'active' ? `<circle cx="32" cy="22" r="4" fill="rgba(45,213,91,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : status === 'inactive' ? `<circle cx="32" cy="22" r="4" fill="rgba(229,62,62,.2)"/><circle cx="32" cy="22" r="2" fill="${ledCol}"/>` : `<circle cx="32" cy="22" r="2" fill="${ledCol}"/>`}
-              </svg>
+              ${typeIcon}
             </div>
             <div class="device-card-body">
               <div class="device-card-meter" id="meter-${dev.dev_eui}">${meterDisplay != null ? `${meterDisplay}<span class="meter-unit">${meterUnit}</span>` : '<span style="color:var(--ttn-gray);font-size:14px;font-weight:500">Kein Zählerstand</span>'}</div>
