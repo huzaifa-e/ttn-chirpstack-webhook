@@ -667,7 +667,7 @@
         <div class="chart-card-subtitle">Verbrauch pro Stunde (interpoliert aus Zählerstand)</div>
       </div>
       <div class="chart-card" id="chartSmlPowerCard" style="display:none">
-        <div class="chart-card-header"><span class="chart-card-title">Live-Leistung (OBIS 16.7.0)</span></div>
+        <div class="chart-card-header"><span class="chart-card-title">Live</span></div>
         <div id="chartSmlPower"></div>
         <div class="chart-card-subtitle">Negativ = Einspeisung (Sonnen-Icon) · Positiv = Netzbezug (Wolken-Icon) · Einheit kW</div>
       </div>
@@ -1082,9 +1082,11 @@ async function loadOverview() {
         const devType = getDeviceType(dev.dev_eui);
         const meterUnit = DEVICE_TYPE_META[devType]?.unit || 'm³';
         const meterRaw = dev.meter_value_raw != null ? String(dev.meter_value_raw) : null;
-        const meterDisplay = meterRaw && meterRaw.trim() !== ''
-          ? meterRaw
-          : (dev.meter_value != null ? String(dev.meter_value).replace('.', ',') : null);
+        const meterDisplay = devType === 'electricity_sml'
+          ? (dev.meter_value != null ? Number(dev.meter_value).toFixed(2).replace('.', ',') : null)
+          : (meterRaw && meterRaw.trim() !== ''
+              ? meterRaw
+              : (dev.meter_value != null ? String(dev.meter_value).replace('.', ',') : null));
         const typeIcon = getDeviceTypeIconSvg(devType, status);
 
         return `
@@ -1659,7 +1661,7 @@ async function loadImuSeries() {
   else { chartImu = new ApexCharts($('chartImu'), options); chartImu.render(); }
 }
 
-// =================== CHART: SML LIVE POWER (OBIS 16.7.0) ===================
+// =================== CHART: SML LIVE POWER ===================
 async function loadSmlPowerSeries() {
   if (!currentDevEui || !isSmlDevice(currentDevEui)) return;
   const days = Number($('days').value || 30);
@@ -1670,6 +1672,12 @@ async function loadSmlPowerSeries() {
   const cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#9AA4B2" d="M7.5 19a4.5 4.5 0 1 1 .6-8.96A5.5 5.5 0 0 1 18.8 12a3.8 3.8 0 1 1 .2 7H7.5Z"/></svg>`;
   const sunIconPath = `data:image/svg+xml;utf8,${encodeURIComponent(sunSvg)}`;
   const cloudIconPath = `data:image/svg+xml;utf8,${encodeURIComponent(cloudSvg)}`;
+  const legendDualIcon = `
+    <span style="display:inline-flex;align-items:center;gap:4px">
+      <img src="${sunIconPath}" width="12" height="12" alt="Sonne"/>
+      <img src="${cloudIconPath}" width="12" height="12" alt="Wolke"/>
+    </span>
+  `.trim();
 
   const labels = [];
   const powerKw = [];
@@ -1698,7 +1706,7 @@ async function loadSmlPowerSeries() {
   const options = {
     ...darkTheme,
     chart: { ...darkTheme.chart, type: 'line', height: 280, toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
-    series: [{ name: 'OBIS 16.7.0 (kW)', data: powerKw }],
+    series: [{ name: 'Live (kW)', data: powerKw }],
     annotations: { images: iconImages },
     xaxis: { type: 'datetime', categories: labels },
     yaxis: {
@@ -1719,7 +1727,15 @@ async function loadSmlPowerSeries() {
         }
       }
     },
-    legend: { show: true, labels: { colors: '#C9D1D9' } }
+    legend: {
+      show: true,
+      position: 'top',
+      horizontalAlign: 'right',
+      labels: { colors: '#C9D1D9' },
+      markers: {
+        customHTML: () => legendDualIcon,
+      }
+    }
   };
 
   if (chartSmlPower) { chartSmlPower.updateOptions(options); }
