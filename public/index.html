@@ -175,21 +175,23 @@
       color: var(--ttn-text);
     }
 
-    /* Device Grid */
-    .device-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-      gap: 16px;
-    }
+    /* Device groups rendered as columns: one column per device type */
     .device-groups {
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      align-items: start;
       gap: 22px;
     }
     .device-group {
       display: flex;
       flex-direction: column;
       gap: 10px;
+      min-width: 0;
+    }
+    .device-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
     }
     .device-group-header {
       display: flex;
@@ -471,6 +473,7 @@
 
     /* Responsive */
     @media (max-width: 768px) {
+      .device-groups { grid-template-columns: 1fr; }
       .device-grid { grid-template-columns: 1fr; }
       .chart-grid { grid-template-columns: 1fr; }
       .topbar { padding: 0 12px; }
@@ -669,7 +672,25 @@
       <div class="chart-card" id="chartSmlPowerCard" style="display:none">
         <div class="chart-card-header"><span class="chart-card-title">Live</span></div>
         <div id="chartSmlPower"></div>
-        <div class="chart-card-subtitle">Negativ = Einspeisung (Sonnen-Icon) · Positiv = Netzbezug (Wolken-Icon) · Einheit kW</div>
+        <div class="chart-card-subtitle">
+          Negativ = Einspeisung
+          <span style="display:inline-flex;width:13px;height:13px;vertical-align:-2px">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <circle cx="12" cy="12" r="4.2" fill="#F5A623"></circle>
+              <g stroke="#F5A623" stroke-width="1.8" stroke-linecap="round">
+                <path d="M12 2.5v3"></path><path d="M12 18.5v3"></path><path d="M2.5 12h3"></path><path d="M18.5 12h3"></path>
+                <path d="m5.3 5.3 2.2 2.2"></path><path d="m16.5 16.5 2.2 2.2"></path><path d="m18.7 5.3-2.2 2.2"></path><path d="m7.5 16.5-2.2 2.2"></path>
+              </g>
+            </svg>
+          </span>
+          · Positiv = Netzbezug
+          <span style="display:inline-flex;width:13px;height:13px;vertical-align:-2px">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path fill="#9AA4B2" d="M7.5 19a4.5 4.5 0 1 1 .6-8.96A5.5 5.5 0 0 1 18.8 12a3.8 3.8 0 1 1 .2 7H7.5Z"></path>
+            </svg>
+          </span>
+          · Einheit kW
+        </div>
       </div>
       <div class="chart-card">
         <div class="chart-card-header"><span class="chart-card-title">Batteriespannung (mV)</span></div>
@@ -1674,10 +1695,16 @@ async function loadSmlPowerSeries() {
   const cloudIconPath = `data:image/svg+xml;utf8,${encodeURIComponent(cloudSvg)}`;
   const legendDualIcon = `
     <span style="display:inline-flex;align-items:center;gap:4px">
-      <img src="${sunIconPath}" width="12" height="12" alt="Sonne"/>
-      <img src="${cloudIconPath}" width="12" height="12" alt="Wolke"/>
+      <img src="${sunIconPath}" width="12" height="12" alt="" aria-hidden="true"/>
+      <img src="${cloudIconPath}" width="12" height="12" alt="" aria-hidden="true"/>
     </span>
   `.trim();
+  const legendHtml = `<span style="display:inline-flex;align-items:center;gap:6px">${legendDualIcon}<span>Live (kW)</span></span>`;
+  const setLegendIcons = (chartCtx) => {
+    const root = chartCtx?.el || $('chartSmlPower');
+    const label = root?.querySelector?.('.apexcharts-legend-series .apexcharts-legend-text');
+    if (label) label.innerHTML = legendHtml;
+  };
 
   const labels = [];
   const powerKw = [];
@@ -1705,7 +1732,17 @@ async function loadSmlPowerSeries() {
 
   const options = {
     ...darkTheme,
-    chart: { ...darkTheme.chart, type: 'line', height: 280, toolbar: { show: true }, zoom: { enabled: true, type: 'x', autoScaleYaxis: true } },
+    chart: {
+      ...darkTheme.chart,
+      type: 'line',
+      height: 280,
+      toolbar: { show: true },
+      zoom: { enabled: true, type: 'x', autoScaleYaxis: true },
+      events: {
+        mounted: setLegendIcons,
+        updated: setLegendIcons,
+      },
+    },
     series: [{ name: 'Live (kW)', data: powerKw }],
     annotations: { images: iconImages },
     xaxis: { type: 'datetime', categories: labels },
@@ -1722,7 +1759,7 @@ async function loadSmlPowerSeries() {
       y: {
         formatter: (val) => {
           if (val == null) return '—';
-          const flow = val < 0 ? 'Einspeisung (Sonnen-Icon)' : 'Netzbezug (Wolken-Icon)';
+          const flow = val < 0 ? 'Einspeisung' : 'Netzbezug';
           return `${Number(val).toFixed(3).replace('.', ',')} kW | ${flow}`;
         }
       }
@@ -1733,7 +1770,8 @@ async function loadSmlPowerSeries() {
       horizontalAlign: 'right',
       labels: { colors: '#C9D1D9' },
       markers: {
-        customHTML: () => legendDualIcon,
+        width: 0,
+        height: 0,
       }
     }
   };
