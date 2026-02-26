@@ -271,14 +271,19 @@ function parseLoRaPayload(up: any) {
   let meterRaw = firstDefined(up, [
     ["meterValue"],
     ["meter_value"],
+    ["obis_1_8_0"],
     ["message"],
     ["uplink_message", "decoded_payload", "meterValue"],
+    ["uplink_message", "decoded_payload", "obis_1_8_0"],
   ]);
 
   if (meterRaw == null && decodedObj) {
     meterRaw = findFirstKeyDeep(decodedObj, [
       "meterValue",
       "meter_value",
+      "obis_1_8_0",
+      "obis1_8_0",
+      "obis_1_8_0_value",
       "meter",
       "reading",
       "counter",
