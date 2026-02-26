@@ -132,7 +132,7 @@
 
     /* =================== MAIN LAYOUT =================== */
     .main-container {
-      max-width: 1360px;
+      max-width: 1480px;
       margin: 0 auto;
       padding: 24px;
     }
@@ -178,20 +178,20 @@
     /* Device groups rendered as columns: one column per device type */
     .device-groups {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       align-items: start;
-      gap: 22px;
+      gap: 18px;
     }
     .device-group {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       min-width: 0;
     }
     .device-grid {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: 12px;
     }
     .device-group-header {
       display: flex;
@@ -218,11 +218,11 @@
       background: var(--ttn-card);
       border: 1px solid var(--ttn-border);
       border-radius: var(--radius);
-      padding: 20px;
+      padding: 16px;
       cursor: pointer;
       transition: var(--transition);
       display: flex;
-      gap: 16px;
+      gap: 12px;
       position: relative;
       overflow: hidden;
     }
@@ -233,7 +233,7 @@
       box-shadow: var(--shadow);
     }
     .device-card-image {
-      width: 90px;
+      width: 74px;
       flex-shrink: 0;
       align-self: stretch;
       border-radius: var(--radius-sm);
@@ -263,7 +263,7 @@
     }
     .device-card-meter {
       font-weight: 700;
-      font-size: 22px;
+      font-size: 20px;
       color: #fff;
       letter-spacing: -.5px;
       white-space: nowrap;
@@ -272,26 +272,26 @@
       line-height: 1.2;
     }
     .device-card-meter .meter-unit {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
       color: var(--ttn-gray);
       margin-left: 2px;
     }
     .device-card-eui {
-      font-size: 12px;
+      font-size: 11px;
       font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
       color: var(--ttn-gray);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .device-card-status {
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: .5px;
-      padding: 2px 8px;
+      padding: 2px 7px;
       border-radius: 4px;
     }
     .status-active { background: rgba(45, 213, 91, .12); color: var(--ttn-green); }
@@ -309,17 +309,18 @@
     .device-card-metrics {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px 12px;
-      margin-top: 8px;
+      gap: 4px 8px;
+      margin-top: 6px;
     }
     .metric-item {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
+      gap: 4px;
+      font-size: 11px;
       color: var(--ttn-gray);
+      min-width: 0;
     }
-    .metric-item .metric-icon { font-size: 13px; width: 16px; text-align: center; }
+    .metric-item .metric-icon { font-size: 12px; width: 14px; text-align: center; }
     .metric-item .metric-val { color: var(--ttn-gray-light); font-weight: 500; }
     .metric-item.health-good .metric-val { color: var(--ttn-green); }
     .metric-item.health-warn .metric-val { color: var(--ttn-yellow); }
@@ -351,7 +352,7 @@
 
     .rssi-bar-bg {
       height: 4px; background: var(--ttn-border); border-radius: 2px;
-      flex: 1; max-width: 60px;
+      flex: 1; max-width: 52px;
     }
     .rssi-bar-fill { height: 100%; border-radius: 2px; transition: width .4s ease; }
 
@@ -478,6 +479,10 @@
     .empty-state .icon { font-size: 56px; margin-bottom: 16px; opacity: .3; }
     .empty-state h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--ttn-gray-light); }
     .empty-state p { color: var(--ttn-gray); font-size: 14px; }
+
+    @media (max-width: 1180px) {
+      .device-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
 
     /* Responsive */
     @media (max-width: 768px) {
@@ -759,29 +764,30 @@ function getDeviceTypeColorByStatus(deviceType, status) {
 
 function getDeviceTypeIconSvg(deviceType, status) {
   const palette = getDeviceTypeColorByStatus(deviceType, status);
+  const iconSize = 58;
   if (deviceType === 'gas') {
     return `
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${iconSize}px;height:${iconSize}px">
         <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
         <path d="M32 14c2 7-5 10-5 17 0 4 2.8 7 5.8 7s5.2-2.2 5.2-5.3c0-4.3-4.2-7.2-3.1-12.7 5.6 3.4 9.1 9.3 9.1 15.4 0 7-5.2 13.6-12 13.6S20 42.5 20 35.5c0-7.4 4.8-14.8 12-21.5Z" fill="${palette.icon}"/>
       </svg>`;
   }
   if (deviceType === 'water') {
     return `
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${iconSize}px;height:${iconSize}px">
         <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
         <path d="M32 12c-7.6 10.3-14 17.3-14 24.3C18 44.9 24.3 50 32 50s14-5.1 14-13.7C46 29.3 39.6 22.3 32 12Z" fill="${palette.icon}"/>
       </svg>`;
   }
   if (deviceType === 'electricity_ferraris' || deviceType === 'electricity_sml') {
     return `
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${iconSize}px;height:${iconSize}px">
         <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
         <path d="M36 10 21 35h10l-3 19 15-25H33l3-19Z" fill="${palette.icon}"/>
       </svg>`;
   }
   return `
-    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:68px;height:68px">
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:${iconSize}px;height:${iconSize}px">
       <circle cx="32" cy="32" r="28" fill="${palette.bg}" stroke="${palette.stroke}" stroke-width="1.5"/>
       <circle cx="32" cy="32" r="8" fill="${palette.icon}"/>
     </svg>`;
