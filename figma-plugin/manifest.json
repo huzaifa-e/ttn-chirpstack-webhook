@@ -1,0 +1,7 @@
+{
+  "name": "EMONI Dashboard Import",
+  "id": "emoni-lorawan-dashboard-import",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"]
+}

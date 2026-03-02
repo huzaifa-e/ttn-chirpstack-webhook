@@ -20,6 +20,12 @@ import {
   listDeviceTypes,
   setDeviceType,
   normalizeDeviceType,
+  listRecentReadings,
+  getDeviceAutoRecalibrationSettings,
+  setDeviceAutoRecalibrationSettings,
+  setLastAutoRecalibratedAt,
+  storeAnomaly,
+  listAnomalies,
 } from "./db.js";
 
 dotenv.config();
@@ -47,6 +53,10 @@ const DEFAULT_DAYS = Number(process.env.UI_DAYS || "30");
 const TTN_DOWNLINK_API_KEY = process.env.TTN_DOWNLINK_API_KEY || "";
 const TTN_API_BASE = (process.env.TTN_API_BASE || "https://eu1.cloud.thethings.network").replace(/\/$/, "");
 const TTN_DEFAULT_F_PORT = Number(process.env.TTN_DEFAULT_F_PORT || "15");
+const AUTO_RECAL_DEFAULT_ENABLED = String(process.env.AUTO_RECAL_DEFAULT_ENABLED || "1") !== "0";
+const AUTO_RECAL_DEFAULT_QMAX_FACTOR = Number(process.env.AUTO_RECAL_DEFAULT_QMAX_FACTOR || "6");
+const AUTO_RECAL_DEFAULT_MIN_JUMP = Number(process.env.AUTO_RECAL_DEFAULT_MIN_JUMP || "100000");
+const AUTO_RECAL_DEFAULT_COOLDOWN_MIN = Number(process.env.AUTO_RECAL_DEFAULT_COOLDOWN_MIN || "180");
 
 // ---- helpers ----
 const HEX16 = /^[0-9a-fA-F]{16}$/;
@@ -358,6 +368,198 @@ function csvEscape(v: unknown): string {
   return s;
 }
 
+function getSafeNumber(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getEffectiveAutoRecalibrationSettings(devEui: string) {
+  const saved = getDeviceAutoRecalibrationSettings(devEui);
+  return {
+    enabled: saved?.enabled ?? AUTO_RECAL_DEFAULT_ENABLED,
+    qmax_factor: getSafeNumber(saved?.qmax_factor, AUTO_RECAL_DEFAULT_QMAX_FACTOR),
+    min_jump: getSafeNumber(saved?.min_jump, AUTO_RECAL_DEFAULT_MIN_JUMP),
+    cooldown_minutes: Math.max(1, Math.round(getSafeNumber(saved?.cooldown_minutes, AUTO_RECAL_DEFAULT_COOLDOWN_MIN))),
+    f_port: Math.min(255, Math.max(1, Math.round(getSafeNumber(saved?.f_port, TTN_DEFAULT_F_PORT)))),
+    last_auto_recalibrated_at: saved?.last_auto_recalibrated_at ?? null,
+  };
+}
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const arr = values.slice().sort((a, b) => a - b);
+  const m = Math.floor(arr.length / 2);
+  if (arr.length % 2 === 1) return arr[m];
+  return (arr[m - 1] + arr[m]) / 2;
+}
+
+function resolveTtnIdentifiers(devEui: string, overrides?: { applicationId?: string | null; deviceId?: string | null }) {
+  const last = getLastUplink(devEui);
+  const applicationId = String(overrides?.applicationId || last?.application_id || "").trim();
+  const deviceId = String(overrides?.deviceId || last?.device_name || "").trim();
+  return { applicationId, deviceId };
+}
+
+async function pushTtnJsonDownlink(input: {
+  applicationId: string;
+  deviceId: string;
+  payloadObj: Record<string, unknown>;
+  fPort: number;
+  confirmed?: boolean;
+}) {
+  const ttnUrl = `${TTN_API_BASE}/api/v3/as/applications/${encodeURIComponent(input.applicationId)}/devices/${encodeURIComponent(input.deviceId)}/down/push`;
+  const frmPayload = Buffer.from(JSON.stringify(input.payloadObj), "utf8").toString("base64");
+  const payload = {
+    downlinks: [
+      {
+        f_port: input.fPort,
+        confirmed: input.confirmed ?? true,
+        frm_payload: frmPayload,
+      },
+    ],
+  };
+
+  const r = await fetch(ttnUrl, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${TTN_DOWNLINK_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  let responseJson: unknown = null;
+  let responseText = "";
+  if (!r.ok) {
+    responseText = await r.text();
+  } else {
+    try { responseJson = await r.json(); } catch {}
+  }
+
+  return {
+    ok: r.ok,
+    status: r.status,
+    frmPayload,
+    ttn: responseJson,
+    details: responseText,
+  };
+}
+
+async function maybeIssueAutoRecalibration(input: {
+  devEui: string;
+  meterValue: number;
+  at: string;
+  applicationId?: string | null;
+  deviceId?: string | null;
+}) {
+  if (!TTN_DOWNLINK_API_KEY) return;
+
+  const cfg = getEffectiveAutoRecalibrationSettings(input.devEui);
+  if (!cfg.enabled) return;
+
+  const nowMs = Date.now();
+  if (cfg.last_auto_recalibrated_at) {
+    const lastMs = new Date(cfg.last_auto_recalibrated_at).getTime();
+    if (Number.isFinite(lastMs) && nowMs - lastMs < cfg.cooldown_minutes * 60 * 1000) {
+      return;
+    }
+  }
+
+  const recent = listRecentReadings(input.devEui, 8);
+  if (recent.length < 2) return;
+
+  const prev = recent[recent.length - 2]?.meter_value;
+  const cur = recent[recent.length - 1]?.meter_value;
+  if (!Number.isFinite(prev) || !Number.isFinite(cur)) return;
+
+  const jump = cur - prev;
+  if (!(jump > 0)) return;
+
+  const trendDeltas: number[] = [];
+  for (let i = 1; i < recent.length - 1; i++) {
+    const d = recent[i].meter_value - recent[i - 1].meter_value;
+    if (Number.isFinite(d) && d > 0) trendDeltas.push(d);
+  }
+
+  const trendMedian = median(trendDeltas);
+  const trendThreshold = trendMedian > 0 ? trendMedian * Math.max(1, cfg.qmax_factor) : 0;
+  const effectiveThreshold = Math.max(cfg.min_jump, trendThreshold);
+  if (!(jump >= effectiveThreshold)) return;
+
+  // log overshoot anomaly regardless of whether we can send downlink
+  storeAnomaly({
+    dev_eui: input.devEui,
+    at: input.at,
+    event_type: "overshoot",
+    meter_value: cur,
+    previous_value: prev,
+    jump,
+    threshold: effectiveThreshold,
+    action: "auto_recalibrate_pending",
+    details: `Meter jumped ${jump.toFixed(3)} (threshold ${effectiveThreshold.toFixed(3)}, Qmax factor ${cfg.qmax_factor})`,
+  });
+
+  const ids = resolveTtnIdentifiers(input.devEui, {
+    applicationId: input.applicationId,
+    deviceId: input.deviceId,
+  });
+  if (!ids.applicationId || !ids.deviceId) {
+    pushEvent({
+      type: "auto-recalibrate-skip",
+      devEui: input.devEui,
+      reason: "missing-ttn-identifiers",
+      jump,
+      threshold: effectiveThreshold,
+      at: input.at,
+    });
+    return;
+  }
+
+  try {
+    const sent = await pushTtnJsonDownlink({
+      applicationId: ids.applicationId,
+      deviceId: ids.deviceId,
+      payloadObj: { recalibrate: 1 },
+      fPort: cfg.f_port,
+      confirmed: true,
+    });
+
+    if (!sent.ok) {
+      pushEvent({
+        type: "auto-recalibrate-failed",
+        devEui: input.devEui,
+        at: input.at,
+        status: sent.status,
+        details: sent.details?.slice(0, 300),
+        jump,
+        threshold: effectiveThreshold,
+      });
+      return;
+    }
+
+    setLastAutoRecalibratedAt(input.devEui, new Date().toISOString());
+    pushEvent({
+      type: "auto-recalibrate",
+      devEui: input.devEui,
+      at: input.at,
+      jump,
+      threshold: effectiveThreshold,
+      fPort: cfg.f_port,
+      applicationId: ids.applicationId,
+      deviceId: ids.deviceId,
+    });
+    sseBroadcast({ type: "auto-recalibrate", devEui: input.devEui, at: input.at, jump, threshold: effectiveThreshold });
+    console.log(`[AUTO-RECAL] devEui=${input.devEui} jump=${jump.toFixed(3)} threshold=${effectiveThreshold.toFixed(3)} fPort=${cfg.f_port}`);
+  } catch (err) {
+    pushEvent({
+      type: "auto-recalibrate-error",
+      devEui: input.devEui,
+      at: input.at,
+      error: String((err as any)?.message || err),
+    });
+  }
+}
+
 // keep a few recent events in memory
 const lastEvents: any[] = [];
 function pushEvent(e: any) {
@@ -474,6 +676,21 @@ async function handleLoRaWebhook(req: Request, res: Response) {
     pushEvent({ type: "up", provider, devEui, meterValue, battery_mv, rssi, snr, at });
     sseBroadcast({ type: "up", devEui, at, meterValue, battery_mv });
     console.log(`[STORE] devEui=${devEui} meter=${meterValue ?? "(null)"} batt=${battery_mv ?? "(null)"}mV at=${at}`);
+
+    // auto-recalibration check
+    if (meterValue != null) {
+      try {
+        await maybeIssueAutoRecalibration({
+          devEui,
+          meterValue,
+          at,
+          applicationId,
+          deviceId: deviceName,
+        });
+      } catch (autoErr) {
+        console.error("[AUTO-RECAL] error:", autoErr);
+      }
+    }
   } catch (e) {
     console.error("[ERROR] storeReading failed:", e);
   }
@@ -576,13 +793,13 @@ app.get("/api/tx-count", (req, res) => {
 
 app.post("/api/downlink/upload-interval", async (req, res) => {
   const devEui = String(req.body?.devEui || "").trim().toLowerCase();
-  const minutes = Number(req.body?.minutes);
+  const seconds = Number(req.body?.seconds);
   const fPortRaw = req.body?.fPort ?? TTN_DEFAULT_F_PORT;
   const fPort = Number(fPortRaw);
 
   if (!devEui) return res.status(400).json({ error: "devEui is required" });
-  if (!Number.isFinite(minutes) || minutes < 1) {
-    return res.status(400).json({ error: "minutes must be a positive number (minutes)" });
+  if (!Number.isFinite(seconds) || seconds < 1) {
+    return res.status(400).json({ error: "seconds must be a positive number" });
   }
   if (!Number.isInteger(fPort) || fPort < 1 || fPort > 255) {
     return res.status(400).json({ error: "fPort must be an integer between 1 and 255" });
@@ -591,68 +808,135 @@ app.post("/api/downlink/upload-interval", async (req, res) => {
     return res.status(500).json({ error: "Server missing TTN_DOWNLINK_API_KEY" });
   }
 
-  const last = getLastUplink(devEui);
-  const applicationId = String(req.body?.applicationId || last?.application_id || "").trim();
-  const deviceId = String(req.body?.deviceId || last?.device_name || "").trim();
-
-  if (!applicationId || !deviceId) {
+  const ids = resolveTtnIdentifiers(devEui, {
+    applicationId: req.body?.applicationId,
+    deviceId: req.body?.deviceId,
+  });
+  if (!ids.applicationId || !ids.deviceId) {
     return res.status(400).json({
       error: "Could not resolve TTN identifiers. Need applicationId and deviceId (from latest uplink or request body).",
       devEui,
-      applicationId: applicationId || null,
-      deviceId: deviceId || null,
+      applicationId: ids.applicationId || null,
+      deviceId: ids.deviceId || null,
     });
   }
 
-  const ttnUrl = `${TTN_API_BASE}/api/v3/as/applications/${encodeURIComponent(applicationId)}/devices/${encodeURIComponent(deviceId)}/down/push`;
-  const downlinkObj = { upload_interval: Math.round(minutes) };
-  const frmPayload = Buffer.from(JSON.stringify(downlinkObj), "utf8").toString("base64");
-  const payload = {
-    downlinks: [
-      {
-        f_port: fPort,
-        confirmed: true,
-        frm_payload: frmPayload,
-      },
-    ],
+  const roundedSec = Math.round(seconds);
+  const minutesVal = Math.round(seconds / 60);
+  const downlinkObj: Record<string, number> = {
+    upload_interval: minutesVal > 0 ? minutesVal : 1,
+    upload_interval_sec: roundedSec,
+    upload_sec: roundedSec,
+    upload_interval_min: minutesVal > 0 ? minutesVal : 1,
   };
 
   try {
-    const r = await fetch(ttnUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${TTN_DOWNLINK_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+    const sent = await pushTtnJsonDownlink({
+      applicationId: ids.applicationId,
+      deviceId: ids.deviceId,
+      payloadObj: downlinkObj,
+      fPort,
+      confirmed: true,
     });
 
-    if (!r.ok) {
-      const body = await r.text();
+    if (!sent.ok) {
       return res.status(502).json({
         error: "TTN downlink request failed",
-        status: r.status,
-        details: body.slice(0, 800),
+        status: sent.status,
+        details: sent.details?.slice(0, 800),
       });
     }
-
-    let responseJson: unknown = null;
-    try { responseJson = await r.json(); } catch {}
 
     return res.json({
       ok: true,
       devEui,
-      applicationId,
-      deviceId,
-      minutes: Math.round(minutes),
+      applicationId: ids.applicationId,
+      deviceId: ids.deviceId,
+      seconds: roundedSec,
+      minutes: minutesVal,
       fPort,
       confirmed: true,
-      frm_payload: frmPayload,
-      ttn: responseJson,
+      downlinkPayload: downlinkObj,
+      frm_payload: sent.frmPayload,
+      ttn: sent.ttn,
     });
   } catch (err: any) {
     return res.status(502).json({ error: "Failed to call TTN downlink API", details: String(err?.message || err) });
   }
+});
+
+// ---- manual recalibration downlink ----
+app.post("/api/downlink/recalibrate", async (req, res) => {
+  const devEui = String(req.body?.devEui || "").trim().toLowerCase();
+  const fPortRaw = req.body?.fPort ?? TTN_DEFAULT_F_PORT;
+  const fPort = Number(fPortRaw);
+
+  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!Number.isInteger(fPort) || fPort < 1 || fPort > 255) {
+    return res.status(400).json({ error: "fPort must be an integer between 1 and 255" });
+  }
+  if (!TTN_DOWNLINK_API_KEY) {
+    return res.status(500).json({ error: "Server missing TTN_DOWNLINK_API_KEY" });
+  }
+
+  const ids = resolveTtnIdentifiers(devEui, {
+    applicationId: req.body?.applicationId,
+    deviceId: req.body?.deviceId,
+  });
+  if (!ids.applicationId || !ids.deviceId) {
+    return res.status(400).json({
+      error: "Could not resolve TTN identifiers.",
+      devEui,
+    });
+  }
+
+  try {
+    const sent = await pushTtnJsonDownlink({
+      applicationId: ids.applicationId,
+      deviceId: ids.deviceId,
+      payloadObj: { recalibrate: 1 },
+      fPort,
+      confirmed: true,
+    });
+
+    if (!sent.ok) {
+      return res.status(502).json({
+        error: "TTN recalibrate downlink failed",
+        status: sent.status,
+        details: sent.details?.slice(0, 800),
+      });
+    }
+
+    storeAnomaly({
+      dev_eui: devEui,
+      at: new Date().toISOString(),
+      event_type: "manual_recalibrate",
+      action: "recalibrate_downlink_sent",
+      details: `Manual recalibrate via UI (fPort ${fPort})`,
+    });
+
+    pushEvent({ type: "manual-recalibrate", devEui, fPort });
+    sseBroadcast({ type: "manual-recalibrate", devEui });
+
+    return res.json({
+      ok: true,
+      devEui,
+      applicationId: ids.applicationId,
+      deviceId: ids.deviceId,
+      fPort,
+      ttn: sent.ttn,
+    });
+  } catch (err: any) {
+    return res.status(502).json({ error: "Failed to call TTN downlink API", details: String(err?.message || err) });
+  }
+});
+
+// ---- anomaly log API ----
+app.get("/api/anomalies", (req, res) => {
+  const devEui = req.query.devEui ? String(req.query.devEui).trim().toLowerCase() : null;
+  const limit = req.query.limit ? Math.max(1, Number(req.query.limit)) : 200;
+  const entries = listAnomalies(devEui, limit);
+  return res.json({ devEui, anomalies: entries });
 });
 
 app.delete("/api/devices/:devEui", (req, res) => {

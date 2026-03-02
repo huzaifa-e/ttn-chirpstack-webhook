@@ -71,6 +71,104 @@ function ensureColumns(): void {
 }
 ensureColumns();
 
+function ensureDeviceSettingsColumns(): void {
+  const add = (col: string, typeSql: string) => {
+    if (!columnExists("device_settings", col)) {
+      db.exec(`ALTER TABLE device_settings ADD COLUMN ${col} ${typeSql};`);
+    }
+  };
+
+  add("auto_recalibrate_enabled", "INTEGER NOT NULL DEFAULT 1");
+  add("auto_recalibrate_qmax_factor", "REAL NOT NULL DEFAULT 6.0");
+  add("auto_recalibrate_min_jump", "REAL NOT NULL DEFAULT 100000");
+  add("auto_recalibrate_cooldown_min", "INTEGER NOT NULL DEFAULT 180");
+  add("auto_recalibrate_f_port", "INTEGER NOT NULL DEFAULT 15");
+  add("last_auto_recalibrated_at", "TEXT");
+}
+ensureDeviceSettingsColumns();
+
+// --- anomaly log table ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS anomaly_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dev_eui TEXT NOT NULL,
+    at TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    meter_value REAL,
+    previous_value REAL,
+    jump REAL,
+    threshold REAL,
+    action TEXT,
+    details TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_anomaly_dev_at ON anomaly_log(dev_eui, at);`);
+
+const stmtInsertAnomaly = db.prepare(`
+  INSERT INTO anomaly_log (dev_eui, at, event_type, meter_value, previous_value, jump, threshold, action, details, created_at)
+  VALUES (@dev_eui, @at, @event_type, @meter_value, @previous_value, @jump, @threshold, @action, @details, @created_at)
+`);
+
+const stmtListAnomalies = db.prepare(`
+  SELECT * FROM anomaly_log
+  WHERE dev_eui = ?
+  ORDER BY at DESC
+  LIMIT ?
+`);
+
+const stmtListAllAnomalies = db.prepare(`
+  SELECT * FROM anomaly_log
+  ORDER BY at DESC
+  LIMIT ?
+`);
+
+export interface AnomalyLogEntry {
+  id: number;
+  dev_eui: string;
+  at: string;
+  event_type: string;
+  meter_value: number | null;
+  previous_value: number | null;
+  jump: number | null;
+  threshold: number | null;
+  action: string | null;
+  details: string | null;
+  created_at: string;
+}
+
+export function storeAnomaly(input: {
+  dev_eui: string;
+  at: string;
+  event_type: string;
+  meter_value?: number | null;
+  previous_value?: number | null;
+  jump?: number | null;
+  threshold?: number | null;
+  action?: string | null;
+  details?: string | null;
+}): void {
+  stmtInsertAnomaly.run({
+    dev_eui: input.dev_eui,
+    at: input.at,
+    event_type: input.event_type,
+    meter_value: input.meter_value ?? null,
+    previous_value: input.previous_value ?? null,
+    jump: input.jump ?? null,
+    threshold: input.threshold ?? null,
+    action: input.action ?? null,
+    details: input.details ?? null,
+    created_at: new Date().toISOString(),
+  });
+}
+
+export function listAnomalies(devEui?: string | null, limit = 200): AnomalyLogEntry[] {
+  if (devEui) {
+    return stmtListAnomalies.all(devEui, Math.max(1, limit)) as AnomalyLogEntry[];
+  }
+  return stmtListAllAnomalies.all(Math.max(1, limit)) as AnomalyLogEntry[];
+}
+
 // --- types ---
 export interface StoreReadingInput {
   dev_eui: string;
@@ -264,6 +362,64 @@ const stmtListDeviceTypes = db.prepare(`
   FROM device_settings
 `);
 
+const stmtGetDeviceAutoRecalibration = db.prepare(`
+  SELECT
+    dev_eui,
+    auto_recalibrate_enabled,
+    auto_recalibrate_qmax_factor,
+    auto_recalibrate_min_jump,
+    auto_recalibrate_cooldown_min,
+    auto_recalibrate_f_port,
+    last_auto_recalibrated_at
+  FROM device_settings
+  WHERE dev_eui = ?
+`);
+
+const stmtSetDeviceAutoRecalibration = db.prepare(`
+  INSERT INTO device_settings (
+    dev_eui,
+    device_type,
+    auto_recalibrate_enabled,
+    auto_recalibrate_qmax_factor,
+    auto_recalibrate_min_jump,
+    auto_recalibrate_cooldown_min,
+    auto_recalibrate_f_port,
+    updated_at
+  )
+  VALUES (
+    @dev_eui,
+    @device_type,
+    @auto_recalibrate_enabled,
+    @auto_recalibrate_qmax_factor,
+    @auto_recalibrate_min_jump,
+    @auto_recalibrate_cooldown_min,
+    @auto_recalibrate_f_port,
+    @updated_at
+  )
+  ON CONFLICT(dev_eui) DO UPDATE SET
+    auto_recalibrate_enabled = excluded.auto_recalibrate_enabled,
+    auto_recalibrate_qmax_factor = excluded.auto_recalibrate_qmax_factor,
+    auto_recalibrate_min_jump = excluded.auto_recalibrate_min_jump,
+    auto_recalibrate_cooldown_min = excluded.auto_recalibrate_cooldown_min,
+    auto_recalibrate_f_port = excluded.auto_recalibrate_f_port,
+    updated_at = excluded.updated_at
+`);
+
+const stmtSetLastAutoRecalibratedAt = db.prepare(`
+  UPDATE device_settings
+  SET last_auto_recalibrated_at = @last_auto_recalibrated_at,
+      updated_at = @updated_at
+  WHERE dev_eui = @dev_eui
+`);
+
+const stmtRecentReadings = db.prepare(`
+  SELECT at, meter_value
+  FROM readings
+  WHERE dev_eui = ?
+  ORDER BY at DESC
+  LIMIT ?
+`);
+
 export type DeviceType = "gas" | "water" | "electricity_ferraris" | "electricity_sml" | "unknown";
 
 const DEVICE_TYPES: readonly DeviceType[] = [
@@ -296,6 +452,95 @@ export function setDeviceType(devEui: string, deviceType: unknown): DeviceType {
 export function getDeviceType(devEui: string): DeviceType {
   const row = stmtGetDeviceType.get(String(devEui || "").trim().toLowerCase()) as { device_type?: string } | undefined;
   return normalizeDeviceType(row?.device_type ?? "unknown");
+}
+
+export interface DeviceAutoRecalibrationSettings {
+  enabled: boolean;
+  qmax_factor: number;
+  min_jump: number;
+  cooldown_minutes: number;
+  f_port: number;
+  last_auto_recalibrated_at: string | null;
+}
+
+export function getDeviceAutoRecalibrationSettings(devEui: string): DeviceAutoRecalibrationSettings | null {
+  const normalizedDevEui = String(devEui || "").trim().toLowerCase();
+  if (!normalizedDevEui) return null;
+
+  const row = stmtGetDeviceAutoRecalibration.get(normalizedDevEui) as {
+    auto_recalibrate_enabled?: number | null;
+    auto_recalibrate_qmax_factor?: number | null;
+    auto_recalibrate_min_jump?: number | null;
+    auto_recalibrate_cooldown_min?: number | null;
+    auto_recalibrate_f_port?: number | null;
+    last_auto_recalibrated_at?: string | null;
+  } | undefined;
+
+  if (!row) return null;
+
+  return {
+    enabled: Number(row.auto_recalibrate_enabled ?? 1) !== 0,
+    qmax_factor: Number(row.auto_recalibrate_qmax_factor ?? 6.0),
+    min_jump: Number(row.auto_recalibrate_min_jump ?? 100000),
+    cooldown_minutes: Number(row.auto_recalibrate_cooldown_min ?? 180),
+    f_port: Number(row.auto_recalibrate_f_port ?? 15),
+    last_auto_recalibrated_at: row.last_auto_recalibrated_at ?? null,
+  };
+}
+
+export function setDeviceAutoRecalibrationSettings(
+  devEui: string,
+  input: {
+    enabled: boolean;
+    qmax_factor: number;
+    min_jump: number;
+    cooldown_minutes: number;
+    f_port: number;
+  }
+): DeviceAutoRecalibrationSettings {
+  const normalizedDevEui = String(devEui || "").trim().toLowerCase();
+  const deviceType = getDeviceType(normalizedDevEui);
+
+  stmtSetDeviceAutoRecalibration.run({
+    dev_eui: normalizedDevEui,
+    device_type: deviceType,
+    auto_recalibrate_enabled: input.enabled ? 1 : 0,
+    auto_recalibrate_qmax_factor: Number(input.qmax_factor),
+    auto_recalibrate_min_jump: Number(input.min_jump),
+    auto_recalibrate_cooldown_min: Math.round(Number(input.cooldown_minutes)),
+    auto_recalibrate_f_port: Math.round(Number(input.f_port)),
+    updated_at: new Date().toISOString(),
+  });
+
+  return getDeviceAutoRecalibrationSettings(normalizedDevEui) ?? {
+    enabled: input.enabled,
+    qmax_factor: input.qmax_factor,
+    min_jump: input.min_jump,
+    cooldown_minutes: input.cooldown_minutes,
+    f_port: input.f_port,
+    last_auto_recalibrated_at: null,
+  };
+}
+
+export function setLastAutoRecalibratedAt(devEui: string, atIso: string): void {
+  const normalizedDevEui = String(devEui || "").trim().toLowerCase();
+  if (!normalizedDevEui) return;
+
+  if (!getDeviceAutoRecalibrationSettings(normalizedDevEui)) {
+    setDeviceAutoRecalibrationSettings(normalizedDevEui, {
+      enabled: true,
+      qmax_factor: 6.0,
+      min_jump: 100000,
+      cooldown_minutes: 180,
+      f_port: 15,
+    });
+  }
+
+  stmtSetLastAutoRecalibratedAt.run({
+    dev_eui: normalizedDevEui,
+    last_auto_recalibrated_at: atIso,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 export function listDeviceTypes(): Record<string, DeviceType> {
@@ -438,6 +683,11 @@ export function listReadings(devEui: string, from?: string, to?: string): Readin
   }));
 }
 
+export function listRecentReadings(devEui: string, limit = 8): Array<{ at: string; meter_value: number }> {
+  const rows = stmtRecentReadings.all(devEui, Math.max(1, Math.floor(limit))) as Array<{ at: string; meter_value: number }>;
+  return rows.slice().reverse();
+}
+
 export function listUplinks(devEui: string, from?: string, to?: string, limit = 500): UplinkRow[] {
   const all = stmtAllUplinksForDevice.all(devEui) as UplinkRow[];
   const filtered = all.filter((r) => {
@@ -457,6 +707,7 @@ export function deleteDevice(devEui: string): { readingsDeleted: number; uplinks
   const infoReadings = stmtDeleteReadingsForDevice.run(devEui);
   const infoUplinks = stmtDeleteUplinksForDevice.run(devEui);
   stmtDeleteSettingsForDevice.run(devEui);
+  db.prepare(`DELETE FROM anomaly_log WHERE dev_eui = ?`).run(devEui);
   return {
     readingsDeleted: Number(infoReadings.changes || 0),
     uplinksDeleted: Number(infoUplinks.changes || 0),

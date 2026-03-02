@@ -636,12 +636,23 @@
       <input id="days" type="number" min="1" max="365" value="30" style="width:70px" />
       <label>Zeitzone</label>
       <input id="tz" type="text" value="Europe/Berlin" style="width:140px" />
-      <label>Upload-Intervall (min)</label>
-      <input id="uploadIntervalMin" type="number" min="1" step="1" value="1" style="width:90px" />
+      <button class="btn btn-primary" id="refresh">Aktualisieren</button>
+    </div>
+
+    <!-- Downlink Controls -->
+    <div class="controls-bar">
+      <label>Upload-Intervall</label>
+      <input id="uploadIntervalVal" type="number" min="1" step="1" value="5" style="width:80px" />
+      <select id="uploadIntervalUnit" style="width:100px">
+        <option value="s">Sekunden</option>
+        <option value="m" selected>Minuten</option>
+        <option value="h">Stunden</option>
+      </select>
       <label>fPort</label>
       <input id="downlinkFPort" type="number" min="1" max="255" step="1" value="15" style="width:70px" />
-      <button class="btn btn-primary" id="setUploadInterval">Intervall setzen</button>
-      <button class="btn btn-primary" id="refresh">Aktualisieren</button>
+      <button class="btn btn-primary" id="setUploadInterval">⏱ Intervall setzen</button>
+      <span style="color:var(--ttn-border);font-size:18px;margin:0 4px">│</span>
+      <button class="btn btn-danger" id="sendRecalibrate" title="Sendet {recalibrate: 1} als Downlink">⟳ Rekalibrierung senden</button>
     </div>
 
     <!-- Data management -->
@@ -708,6 +719,12 @@
         <div class="chart-card-subtitle">Beschleunigungssensor-Daten (imu_ax, imu_ay, imu_az)</div>
       </div>
       <div class="chart-card chart-card-full">
+        <div class="chart-card-header"><span class="chart-card-title">Fehler / Anomalien (OCR-Ausreißer & Rekalibrierungen)</span></div>
+        <div id="chartAnomalies"></div>
+        <div id="anomalyTable" style="margin-top:12px"></div>
+        <div class="chart-card-subtitle">Automatisch erkannte Zähler-Ausreißer und Rekalibrierungen · Rote Punkte = Overshoot · Blaue = Manuelle Rekalibrierung</div>
+      </div>
+      <div class="chart-card chart-card-full">
         <div class="chart-card-header"><span class="chart-card-title">Payload Explorer</span></div>
         <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
           <label style="font-size:12px;color:var(--ttn-gray)">Feld:</label>
@@ -725,7 +742,7 @@
 // =================== GLOBALS ===================
 let currentDevEui = null;
 let deviceSummaries = [];
-let chartDaily, chartBattery, chartRssi, chartField, chartImu, chartHourly, chartHourlyBattery, chartSmlPower;
+let chartDaily, chartBattery, chartRssi, chartField, chartImu, chartHourly, chartHourlyBattery, chartSmlPower, chartAnomalies;
 const EXPECTED_UPLINKS_PER_CHARGE = 12000;
 const DEVICE_TYPE_ORDER = ['gas', 'electricity_ferraris', 'electricity_sml', 'water', 'unknown'];
 const DEVICE_TYPE_META = {
@@ -1294,6 +1311,7 @@ async function refreshDetail() {
       loadPayloadExplorer(),
       loadImuSeries(),
       loadSmlPowerSeries(),
+      loadAnomalySeries(),
     ]);
   } catch (err) {
     console.error('Chart error:', err);
@@ -1678,6 +1696,106 @@ async function loadImuSeries() {
   else { chartImu = new ApexCharts($('chartImu'), options); chartImu.render(); }
 }
 
+// =================== CHART: ANOMALIES / ERROR LOG ===================
+async function loadAnomalySeries() {
+  if (!currentDevEui) return;
+  try {
+    const resp = await fetch(`/api/anomalies?devEui=${encodeURIComponent(currentDevEui)}&limit=500`);
+    const j = await resp.json();
+    const anomalies = j.anomalies || [];
+
+    if (!anomalies.length) {
+      $('anomalyTable').innerHTML = '<div style="font-size:13px;color:var(--ttn-gray);padding:8px 0">Keine Anomalien / Fehler aufgezeichnet.</div>';
+      if (chartAnomalies) { chartAnomalies.destroy(); chartAnomalies = null; }
+      $('chartAnomalies').innerHTML = '';
+      return;
+    }
+
+    // chart: scatter plot of jumps over time
+    const overshootData = [];
+    const recalData = [];
+    anomalies.forEach(a => {
+      const ts = new Date(a.at).getTime();
+      if (a.event_type === 'overshoot') {
+        overshootData.push({ x: ts, y: a.jump ?? 0 });
+      } else {
+        recalData.push({ x: ts, y: a.jump ?? 0 });
+      }
+    });
+
+    const series = [];
+    if (overshootData.length) series.push({ name: 'Overshoot (Fehlablesung)', data: overshootData });
+    if (recalData.length) series.push({ name: 'Rekalibrierung', data: recalData });
+
+    if (series.length) {
+      const options = {
+        ...darkTheme,
+        chart: { ...darkTheme.chart, type: 'scatter', height: 260, toolbar: { show: true }, zoom: { enabled: true, type: 'x' } },
+        colors: ['#E53E3E', '#4361EE'],
+        series,
+        xaxis: { type: 'datetime' },
+        yaxis: {
+          title: { text: 'Sprung (Δ Zählerstand)', style: { color: '#8B949E' } },
+          labels: { formatter: v => (v == null ? '—' : Number(v).toFixed(1).replace('.', ',')) }
+        },
+        markers: { size: 7 },
+        dataLabels: { enabled: false },
+        tooltip: {
+          x: { formatter: v => new Date(v).toLocaleString('de-DE') },
+          y: { formatter: v => (v == null ? '—' : Number(v).toFixed(3).replace('.', ',')) }
+        },
+        legend: { show: true, labels: { colors: '#C9D1D9' } }
+      };
+
+      if (chartAnomalies) { chartAnomalies.updateOptions(options); }
+      else { chartAnomalies = new ApexCharts($('chartAnomalies'), options); chartAnomalies.render(); }
+    }
+
+    // table of recent anomalies
+    const typeLabels = {
+      overshoot: '<span style="color:var(--ttn-red)">⚠ Overshoot</span>',
+      manual_recalibrate: '<span style="color:var(--ttn-accent)">🔧 Manuell</span>',
+      auto_recalibrate: '<span style="color:var(--ttn-yellow)">⟳ Auto</span>',
+    };
+    const rows = anomalies.slice(0, 30).map(a => {
+      const typeHtml = typeLabels[a.event_type] || `<span style="color:var(--ttn-gray)">${a.event_type}</span>`;
+      const when = new Date(a.at).toLocaleString('de-DE');
+      const meterVal = a.meter_value != null ? Number(a.meter_value).toFixed(2).replace('.', ',') : '—';
+      const prevVal = a.previous_value != null ? Number(a.previous_value).toFixed(2).replace('.', ',') : '—';
+      const jumpVal = a.jump != null ? Number(a.jump).toFixed(3).replace('.', ',') : '—';
+      const threshVal = a.threshold != null ? Number(a.threshold).toFixed(1).replace('.', ',') : '—';
+      return `<tr>
+        <td style="padding:4px 8px;white-space:nowrap">${when}</td>
+        <td style="padding:4px 8px">${typeHtml}</td>
+        <td style="padding:4px 8px;text-align:right">${prevVal}</td>
+        <td style="padding:4px 8px;text-align:right">${meterVal}</td>
+        <td style="padding:4px 8px;text-align:right;color:var(--ttn-red)">${jumpVal}</td>
+        <td style="padding:4px 8px;text-align:right">${threshVal}</td>
+        <td style="padding:4px 8px;font-size:11px;color:var(--ttn-gray)">${a.action || '—'}</td>
+      </tr>`;
+    }).join('');
+
+    $('anomalyTable').innerHTML = `
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;color:var(--ttn-gray-light)">
+          <thead><tr style="border-bottom:1px solid var(--ttn-border)">
+            <th style="padding:6px 8px;text-align:left;color:var(--ttn-gray)">Zeitpunkt</th>
+            <th style="padding:6px 8px;text-align:left;color:var(--ttn-gray)">Typ</th>
+            <th style="padding:6px 8px;text-align:right;color:var(--ttn-gray)">Vorher</th>
+            <th style="padding:6px 8px;text-align:right;color:var(--ttn-gray)">Nachher</th>
+            <th style="padding:6px 8px;text-align:right;color:var(--ttn-gray)">Sprung</th>
+            <th style="padding:6px 8px;text-align:right;color:var(--ttn-gray)">Schwelle</th>
+            <th style="padding:6px 8px;text-align:left;color:var(--ttn-gray)">Aktion</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    console.error('Anomaly chart error:', err);
+    $('anomalyTable').innerHTML = '<div style="font-size:12px;color:var(--ttn-red)">Fehler beim Laden der Anomalien</div>';
+  }
+}
+
 // =================== CHART: SML LIVE POWER ===================
 async function loadSmlPowerSeries() {
   if (!currentDevEui || !isSmlDevice(currentDevEui)) return;
@@ -1755,13 +1873,27 @@ $('refresh').addEventListener('click', refreshDetail);
 $('setNow').addEventListener('click', setNowDateInputs);
 $('fieldSel').addEventListener('change', loadPayloadExplorer);
 
+function intervalToSeconds() {
+  const val = Number($('uploadIntervalVal').value || 0);
+  const unit = $('uploadIntervalUnit').value;
+  if (unit === 'h') return val * 3600;
+  if (unit === 'm') return val * 60;
+  return val; // seconds
+}
+
+function formatIntervalDisplay(seconds) {
+  if (seconds >= 3600 && seconds % 3600 === 0) return `${seconds / 3600} h`;
+  if (seconds >= 60 && seconds % 60 === 0) return `${seconds / 60} min`;
+  return `${seconds} s`;
+}
+
 $('setUploadInterval').addEventListener('click', async () => {
   if (!currentDevEui) return;
-  const minutes = Number($('uploadIntervalMin').value || 0);
+  const seconds = intervalToSeconds();
   const fPort = Number($('downlinkFPort').value || 15);
 
-  if (!Number.isFinite(minutes) || minutes < 1) {
-    showToast('Bitte ein gültiges Upload-Intervall in Minuten eingeben', 'error');
+  if (!Number.isFinite(seconds) || seconds < 1) {
+    showToast('Bitte ein gültiges Upload-Intervall eingeben', 'error');
     return;
   }
   if (!Number.isInteger(fPort) || fPort < 1 || fPort > 255) {
@@ -1773,16 +1905,39 @@ $('setUploadInterval').addEventListener('click', async () => {
     const res = await fetch('/api/downlink/upload-interval', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ devEui: currentDevEui, minutes, fPort }),
+      body: JSON.stringify({ devEui: currentDevEui, seconds, fPort }),
     });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       showToast(j?.error ? `Downlink fehlgeschlagen: ${j.error}` : `Downlink fehlgeschlagen (HTTP ${res.status})`, 'error');
       return;
     }
-    showToast(`Upload-Intervall auf ${Math.round(minutes)} min gesetzt (confirmed, fPort ${fPort})`, 'success');
+    showToast(`Upload-Intervall auf ${formatIntervalDisplay(Math.round(seconds))} gesetzt (confirmed, fPort ${fPort})`, 'success');
   } catch (err) {
     showToast('Downlink konnte nicht gesendet werden', 'error');
+  }
+});
+
+$('sendRecalibrate').addEventListener('click', async () => {
+  if (!currentDevEui) return;
+  const fPort = Number($('downlinkFPort').value || 15);
+  if (!confirm(`Rekalibrierung für ${currentDevEui} senden?\nDies sendet {recalibrate: 1} als Downlink.`)) return;
+
+  try {
+    const res = await fetch('/api/downlink/recalibrate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ devEui: currentDevEui, fPort }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(j?.error ? `Rekalibrierung fehlgeschlagen: ${j.error}` : `Fehler (HTTP ${res.status})`, 'error');
+      return;
+    }
+    showToast('Rekalibrierung gesendet ✓', 'success');
+    refreshDetail();
+  } catch (err) {
+    showToast('Rekalibrierung konnte nicht gesendet werden', 'error');
   }
 });
 
@@ -1850,6 +2005,13 @@ function startSse() {
           if ($('pageOverview').classList.contains('active')) loadOverview();
           if (msg.devEui === currentDevEui && $('pageDetail').classList.contains('active')) refreshDetail();
           showToast(`Uplink von ${msg.devEui?.slice(-8) || '?'}`, 'success');
+        }
+        if (msg.type === 'auto-recalibrate') {
+          showToast(`⚠ Auto-Rekalibrierung: ${msg.devEui?.slice(-8) || '?'} (Sprung ${Number(msg.jump || 0).toFixed(1)})`, 'error');
+          if (msg.devEui === currentDevEui && $('pageDetail').classList.contains('active')) refreshDetail();
+        }
+        if (msg.type === 'manual-recalibrate') {
+          showToast(`🔧 Manuelle Rekalibrierung gesendet: ${msg.devEui?.slice(-8) || '?'}`, 'info');
         }
       } catch {}
     };
