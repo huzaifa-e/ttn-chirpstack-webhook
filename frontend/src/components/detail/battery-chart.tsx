@@ -1,8 +1,10 @@
 "use client"
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea } from "recharts"
 import type { Reading } from "@/lib/types"
+import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
+import { useChartZoom } from "./use-chart-zoom"
 
 export function BatteryChart({ readings }: { readings: Reading[] }) {
   const data = readings
@@ -13,20 +15,24 @@ export function BatteryChart({ readings }: { readings: Reading[] }) {
       meter_value: r.meter_value,
     }))
 
+  const zoom = useChartZoom(data, "time")
   if (!data.length) return <ChartEmpty label="Batteriespannung" />
 
   return (
-    <ChartWrapper label="Batteriespannung">
+    <ChartWrapper label="Batteriespannung" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef}>
       <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={data}>
+        <LineChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="time" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={60} />
-          <YAxis tick={{ fontSize: 10 }} domain={["dataMin - 50", "dataMax + 50"]} label={{ value: "mV", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} domain={["dataMin - 50", "dataMax + 50"]} label={{ value: "mV", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip
             contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }}
-            formatter={(value) => [`${value} mV`, "Batterie"]}
+            formatter={(value) => [`${formatChartNumber(value)} mV`, "Batterie"]}
           />
           <Line dataKey="battery_mv" name="Batterie" stroke="#eab308" strokeWidth={2} dot={false} />
+          {zoom.refAreaLeft && zoom.refAreaRight && (
+            <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} strokeOpacity={0.3} fill="#eab308" fillOpacity={0.15} />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </ChartWrapper>

@@ -57,6 +57,11 @@ export function formatInterval(seconds: number | null): string {
   return `${(seconds / 3600).toFixed(1)}h`
 }
 
+export function formatChartNumber(value: unknown): string {
+  if (typeof value !== "number" || Number.isNaN(value)) return String(value ?? "")
+  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2, useGrouping: false }).format(value)
+}
+
 export function estimateBatteryLifetime(batteryMv: number | null, intervalSeconds: number | null): string {
   if (batteryMv == null || intervalSeconds == null) return "—"
   // Rough estimate: 2200mV cutoff, ~8µA sleep current, ~40mA tx for 1s

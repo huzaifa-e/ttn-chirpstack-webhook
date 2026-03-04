@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { BackgroundPlus } from "../demos/background-plus"
+import { EmoniLogo } from "@/components/emoni-logo"
 import { DeviceCard } from "@/components/device-card"
 import { OverviewStats } from "@/components/overview-stats"
 import { SearchModal } from "@/components/search-modal"
@@ -130,14 +131,17 @@ export default function Home() {
         {/* Header */}
         <div className="mb-8 sm:mb-10">
           <div className="flex items-center justify-between mb-4">
-            <motion.h1
-              className="text-3xl sm:text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight"
+            <motion.div
+              className="flex flex-col"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              EMONI Dashboard
-            </motion.h1>
+              <EmoniLogo size={44} className="text-zinc-900 dark:text-zinc-100" />
+              <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mt-1 tracking-wide">
+                EMONI-LoRaWAN Dashboard
+              </span>
+            </motion.div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
               <LiveIndicator connected={connected} />

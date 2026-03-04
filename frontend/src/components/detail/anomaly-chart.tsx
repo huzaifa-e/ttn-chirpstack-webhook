@@ -2,6 +2,7 @@
 
 import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts"
 import type { Anomaly } from "@/lib/types"
+import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 
 const EVENT_COLORS: Record<string, string> = {
@@ -36,7 +37,7 @@ export function AnomalyChart({ anomalies }: { anomalies: Anomaly[] }) {
             tickFormatter={(v) => new Date(v).toLocaleDateString("de-DE", { month: "short", day: "numeric" })}
             tick={{ fontSize: 9 }}
           />
-          <YAxis dataKey="jump" tick={{ fontSize: 10 }} label={{ value: "Sprung", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+          <YAxis dataKey="jump" tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} label={{ value: "Sprung", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip
             contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }}
             formatter={(value) => [typeof value === "number" ? value.toFixed(2) : String(value ?? "")]}

@@ -1,8 +1,10 @@
 "use client"
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea } from "recharts"
 import type { Uplink } from "@/lib/types"
+import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
+import { useChartZoom } from "./use-chart-zoom"
 
 export function IMUChart({ uplinks }: { uplinks: Uplink[] }) {
   const data = uplinks
@@ -20,21 +22,24 @@ export function IMUChart({ uplinks }: { uplinks: Uplink[] }) {
       }
     })
 
+  const zoom = useChartZoom(data, "time")
   if (!data.length) return <ChartEmpty label="IMU Beschleunigung" />
 
   return (
-    <ChartWrapper label="IMU Beschleunigung">
+    <ChartWrapper label="IMU Beschleunigung" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef}>
       <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={data}>
+        <LineChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="time" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={60} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} />
+          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value, name) => [formatChartNumber(value), String(name)]} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Line dataKey="ax" name="aX" stroke="#ef4444" strokeWidth={1.5} dot={false} />
           <Line dataKey="ay" name="aY" stroke="#10b981" strokeWidth={1.5} dot={false} />
           <Line dataKey="az" name="aZ" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
-          <Brush dataKey="time" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
+          {zoom.refAreaLeft && zoom.refAreaRight && (
+            <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} strokeOpacity={0.3} fill="#3b82f6" fillOpacity={0.15} />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </ChartWrapper>

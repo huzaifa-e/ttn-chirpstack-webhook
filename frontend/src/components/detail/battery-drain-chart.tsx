@@ -1,8 +1,10 @@
 "use client"
 
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Brush } from "recharts"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ReferenceArea } from "recharts"
 import type { Reading } from "@/lib/types"
+import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
+import { useChartZoom } from "./use-chart-zoom"
 
 interface DrainPoint {
   time: string
@@ -40,22 +42,25 @@ function computeHourlyDrain(readings: Reading[]): DrainPoint[] {
 
 export function BatteryDrainChart({ readings }: { readings: Reading[] }) {
   const data = computeHourlyDrain(readings)
+  const zoom = useChartZoom(data, "time")
   if (!data.length) return <ChartEmpty label="Stündlicher Batterie-Verbrauch" />
 
   return (
-    <ChartWrapper label="Stündlicher Batterie-Verbrauch">
+    <ChartWrapper label="Stündlicher Batterie-Verbrauch" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef}>
       <ResponsiveContainer width="100%" height={250}>
-        <BarChart data={data}>
+        <BarChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="time" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={60} />
-          <YAxis tick={{ fontSize: 10 }} label={{ value: "mV/h", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
-          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} />
+          <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} label={{ value: "mV/h", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
+          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value, name) => [formatChartNumber(value), String(name)]} />
           <Bar dataKey="drain" name="Verbrauch (mV/h)">
-            {data.map((entry, index) => (
+            {zoom.zoomedData.map((entry, index) => (
               <Cell key={index} fill={entry.drain >= 0 ? "#ef4444" : "#10b981"} />
             ))}
           </Bar>
-          <Brush dataKey="time" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
+          {zoom.refAreaLeft && zoom.refAreaRight && (
+            <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} strokeOpacity={0.3} fill="#3b82f6" fillOpacity={0.15} />
+          )}
         </BarChart>
       </ResponsiveContainer>
     </ChartWrapper>
