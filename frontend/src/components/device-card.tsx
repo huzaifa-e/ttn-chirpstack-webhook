@@ -136,7 +136,7 @@ export const DeviceCard: React.FC<{
                 animate={{ scale: isActive ? 1.03 : 1 }}
                 transition={{ duration: 0.2 }}
               >
-                {formatMeterValueRaw(device.meter_value)}
+                {device.meter_value_raw ?? formatMeterValueRaw(device.meter_value)}
               </motion.div>
               <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">{config.unit}</p>
             </div>

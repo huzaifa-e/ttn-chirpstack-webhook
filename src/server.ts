@@ -679,8 +679,8 @@ async function handleLoRaWebhook(req: Request, res: Response) {
       });
     }
 
-    pushEvent({ type: "up", provider, devEui, meterValue, battery_mv, rssi, snr, at });
-    sseBroadcast({ type: "up", devEui, at, meterValue, battery_mv });
+    pushEvent({ type: "up", provider, devEui, deviceName, meterValue, battery_mv, rssi, snr, at });
+    sseBroadcast({ type: "up", devEui, deviceName, at, meterValue, battery_mv });
     console.log(`[STORE] devEui=${devEui} meter=${meterValue ?? "(null)"} batt=${battery_mv ?? "(null)"}mV at=${at}`);
 
     // auto-recalibration check

@@ -62,8 +62,14 @@ export default function Home() {
   const handleSSE = useCallback(
     (event: SSEEvent) => {
       if (event.type === "up") {
-        toast.info(`Uplink von ${event.devEui}`, {
+        const label = event.deviceName || event.devEui
+        toast(`Uplink von ${label}`, {
           description: event.meterValue != null ? `Zählerstand: ${event.meterValue}` : undefined,
+          style: {
+            background: "#27272a",
+            color: "#a1a1aa",
+            border: "1px solid #3f3f46",
+          },
         })
         // Refresh data
         fetchData()

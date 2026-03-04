@@ -71,6 +71,7 @@ export interface Anomaly {
 export interface SSEEvent {
   type: "up" | "auto-recalibrate" | "manual-recalibrate"
   devEui: string
+  deviceName?: string | null
   at?: string
   meterValue?: number | null
   battery_mv?: number | null
