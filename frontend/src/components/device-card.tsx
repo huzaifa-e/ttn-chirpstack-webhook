@@ -1,10 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
-import { Battery, Clock, Activity } from "lucide-react"
+import { Battery, Clock, Activity, Radio, Timer, MapPin } from "lucide-react"
 import { ProfessionalCard } from "./professional-card"
 import { ConsumptionSparkline } from "./consumption-sparkline"
 import { DeviceIcon } from "./device-icon"
@@ -14,10 +14,62 @@ import { DEVICE_TYPE_CONFIG } from "@/lib/constants"
 import {
   formatMeterValue,
   formatBatteryPercent,
+  formatRSSI,
+  estimateDistance,
+  formatInterval,
   formatTimeAgo,
   getDeviceStatus,
 } from "@/lib/formatters"
 import { setDeviceType } from "@/lib/api"
+
+/** Tiny inline SVG line chart for Zählerstand history */
+const MiniLineChart: React.FC<{ data: number[]; color: string; width?: number; height?: number }> = ({
+  data,
+  color,
+  width = 90,
+  height = 36,
+}) => {
+  const path = useMemo(() => {
+    if (data.length < 2) return ""
+    const min = Math.min(...data)
+    const max = Math.max(...data)
+    const range = max - min || 1
+    const pad = 2
+    const w = width - pad * 2
+    const h = height - pad * 2
+    return data
+      .map((v, i) => {
+        const x = pad + (i / (data.length - 1)) * w
+        const y = pad + h - ((v - min) / range) * h
+        return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`
+      })
+      .join(" ")
+  }, [data, width, height])
+
+  const gradId = `ml-${color.replace("#", "")}`
+
+  const fillPath = useMemo(() => {
+    if (data.length < 2) return ""
+    const pad = 2
+    const w = width - pad * 2
+    return `${path} L ${(pad + w).toFixed(1)} ${(height - pad).toFixed(1)} L ${pad} ${(height - pad).toFixed(1)} Z`
+  }, [path, data.length, width, height])
+
+  if (data.length < 2) return null
+
+  return (
+    <svg width={width} height={height} className="shrink-0">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.03" />
+        </linearGradient>
+      </defs>
+      <path d={fillPath} fill={`url(#${gradId})`} />
+      <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 export const DeviceCard: React.FC<{
   device: DeviceSummary
@@ -83,16 +135,21 @@ export const DeviceCard: React.FC<{
             <StatusBadge status={status} />
           </div>
 
-          {/* Meter Value (Zählerstand) */}
-          <div className="mb-4">
-            <p className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Zählerstand</p>
-            <motion.div
-              className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight"
-              animate={{ scale: isActive ? 1.03 : 1 }}
-              transition={{ duration: 0.2 }}
-            >
-              {formatMeterValue(device.meter_value, currentType)}
-            </motion.div>
+          {/* Meter Value (Zählerstand) + mini line chart */}
+          <div className="flex items-end justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-wider text-zinc-400 dark:text-zinc-500 mb-1">Zählerstand</p>
+              <motion.div
+                className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight"
+                animate={{ scale: isActive ? 1.03 : 1 }}
+                transition={{ duration: 0.2 }}
+              >
+                {formatMeterValue(device.meter_value, currentType)}
+              </motion.div>
+            </div>
+            {sparklineData.length > 2 && (
+              <MiniLineChart data={sparklineData} color={config.color} />
+            )}
           </div>
 
           {/* Consumption Mini Chart */}
@@ -143,6 +200,37 @@ export const DeviceCard: React.FC<{
               </div>
               <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
                 {device.total_uplinks}
+              </span>
+            </div>
+          </div>
+
+          {/* Secondary Metrics - RSSI, Distance, Interval */}
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <Radio size={11} className="text-zinc-400" />
+                <span className="text-[10px] text-zinc-400 dark:text-zinc-500">RSSI</span>
+              </div>
+              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {formatRSSI(device.rssi)}
+              </span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <MapPin size={11} className="text-zinc-400" />
+                <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Distanz</span>
+              </div>
+              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {estimateDistance(device.rssi)}
+              </span>
+            </div>
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <Timer size={11} className="text-zinc-400" />
+                <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Intervall</span>
+              </div>
+              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {formatInterval(device.avg_interval_seconds)}
               </span>
             </div>
           </div>

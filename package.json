@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "apexcharts": "^5.3.4",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.6.2",
     "chart.js": "^4.5.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"

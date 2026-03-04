@@ -195,21 +195,27 @@ export default function DeviceDetailPage() {
 
         {/* Charts */}
         <div className="space-y-6">
-          <DailyConsumptionChart data={dailyData} unit={unit} />
-          <HourlyConsumptionChart readings={readings} unit={unit} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DailyConsumptionChart data={dailyData} unit={unit} />
+            <HourlyConsumptionChart readings={readings} unit={unit} />
+          </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <BatteryChart readings={readings} />
             <BatteryDrainChart readings={readings} />
           </div>
 
-          <RSSIChart readings={readings} />
-          <IMUChart uplinks={uplinks} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <RSSIChart readings={readings} />
+            <IMUChart uplinks={uplinks} />
+          </div>
 
           {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
 
-          <AnomalyChart anomalies={anomalies} />
-          <PayloadExplorer uplinks={uplinks} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <AnomalyChart anomalies={anomalies} />
+            <PayloadExplorer uplinks={uplinks} />
+          </div>
         </div>
 
         {/* Data Management */}
