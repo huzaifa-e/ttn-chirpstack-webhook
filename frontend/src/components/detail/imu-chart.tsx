@@ -1,6 +1,6 @@
 "use client"
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush } from "recharts"
 import type { Uplink } from "@/lib/types"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 
@@ -34,6 +34,7 @@ export function IMUChart({ uplinks }: { uplinks: Uplink[] }) {
           <Line dataKey="ax" name="aX" stroke="#ef4444" strokeWidth={1.5} dot={false} />
           <Line dataKey="ay" name="aY" stroke="#10b981" strokeWidth={1.5} dot={false} />
           <Line dataKey="az" name="aZ" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
+          <Brush dataKey="time" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
         </LineChart>
       </ResponsiveContainer>
     </ChartWrapper>

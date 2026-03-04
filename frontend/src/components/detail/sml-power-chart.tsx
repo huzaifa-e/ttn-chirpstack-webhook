@@ -1,6 +1,6 @@
 "use client"
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Brush } from "recharts"
 import type { Uplink } from "@/lib/types"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 
@@ -35,6 +35,7 @@ export function SMLPowerChart({ uplinks }: { uplinks: Uplink[] }) {
           <YAxis tick={{ fontSize: 10 }} label={{ value: "kW", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} />
           <Line dataKey="power" name="Leistung (kW)" stroke="#a855f7" strokeWidth={2} dot={false} />
+          <Brush dataKey="time" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
         </LineChart>
       </ResponsiveContainer>
     </ChartWrapper>

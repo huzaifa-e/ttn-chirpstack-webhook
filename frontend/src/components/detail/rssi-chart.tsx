@@ -1,6 +1,6 @@
 "use client"
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush } from "recharts"
 import type { Reading } from "@/lib/types"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 
@@ -27,6 +27,7 @@ export function RSSIChart({ readings }: { readings: Reading[] }) {
           <Legend wrapperStyle={{ fontSize: 11 }} />
           <Line yAxisId="rssi" dataKey="rssi" name="RSSI (dBm)" stroke="#3b82f6" strokeWidth={2} dot={false} />
           <Line yAxisId="snr" dataKey="snr" name="SNR (dB)" stroke="#f97316" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+          <Brush dataKey="time" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
         </LineChart>
       </ResponsiveContainer>
     </ChartWrapper>

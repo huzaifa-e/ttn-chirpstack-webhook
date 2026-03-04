@@ -1,6 +1,6 @@
 "use client"
 
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell } from "recharts"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Brush } from "recharts"
 import type { Reading } from "@/lib/types"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 
@@ -55,6 +55,7 @@ export function BatteryDrainChart({ readings }: { readings: Reading[] }) {
               <Cell key={index} fill={entry.drain >= 0 ? "#ef4444" : "#10b981"} />
             ))}
           </Bar>
+          <Brush dataKey="time" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
         </BarChart>
       </ResponsiveContainer>
     </ChartWrapper>

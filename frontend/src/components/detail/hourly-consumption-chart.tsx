@@ -1,6 +1,6 @@
 "use client"
 
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Brush } from "recharts"
 import type { Reading } from "@/lib/types"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 
@@ -44,6 +44,7 @@ export function HourlyConsumptionChart({ readings, unit }: { readings: Reading[]
           <YAxis tick={{ fontSize: 10 }} label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} />
           <Bar dataKey="consumption" name={`Verbrauch (${unit})`} fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+          <Brush dataKey="hour" height={25} fill="rgba(100,100,100,0.1)" stroke="#a1a1aa" travellerWidth={8} />
         </BarChart>
       </ResponsiveContainer>
     </ChartWrapper>

@@ -1,57 +1,55 @@
 "use client"
 
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts"
+import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush } from "recharts"
 import type { DailyConsumption } from "@/lib/types"
+
+const BRUSH_STYLE = { fill: "rgba(100,100,100,0.1)", stroke: "#a1a1aa", height: 25 }
+const TOOLTIP_STYLE = { fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }
 
 export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]; unit: string }) {
   if (!data.length) return <ChartEmpty label="Tagesverbrauch" />
 
   return (
     <ChartWrapper label="Tagesverbrauch">
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={data}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="date" tick={{ fontSize: 10 }} className="text-zinc-400" />
           <YAxis tick={{ fontSize: 10 }} className="text-zinc-400" label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
-          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Bar dataKey="consumption" name={`Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          <Brush dataKey="date" {...BRUSH_STYLE} travellerWidth={8} />
         </ComposedChart>
       </ResponsiveContainer>
     </ChartWrapper>
   )
 }
 
-export function MeterBatteryChart({ data, unit, readings }: { data: DailyConsumption[]; unit: string; readings: { at: string; battery_mv: number | null; meter_value: number | null }[] }) {
-  // Merge daily closing Zählerstand with battery readings
-  const chartData = data
-    .filter((d) => d.closing != null)
-    .map((d) => {
-      // Find closest battery reading for this day
-      const dayReadings = readings.filter((r) => r.at.startsWith(d.date) && r.battery_mv != null)
-      const avgBattery = dayReadings.length
-        ? Math.round(dayReadings.reduce((s, r) => s + (r.battery_mv ?? 0), 0) / dayReadings.length)
-        : null
-      return {
-        date: d.date,
-        closing: d.closing,
-        battery_mv: avgBattery,
-      }
-    })
+export function MeterBatteryChart({ unit, readings }: { unit: string; readings: { at: string; battery_mv: number | null; meter_value: number | null }[] }) {
+  // Use every individual reading for full resolution
+  const chartData = readings
+    .filter((r) => r.meter_value != null || r.battery_mv != null)
+    .map((r) => ({
+      time: new Date(r.at).toLocaleString("de-DE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+      meter_value: r.meter_value,
+      battery_mv: r.battery_mv,
+    }))
 
   if (!chartData.length) return <ChartEmpty label="Zählerstand & Batterie" />
 
   return (
     <ChartWrapper label="Zählerstand & Batterie">
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} className="text-zinc-400" />
-          <YAxis yAxisId="left" tick={{ fontSize: 10 }} className="text-zinc-400" label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
-          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} className="text-zinc-400" label={{ value: "mV", angle: 90, position: "insideRight", style: { fontSize: 10 } }} />
-          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} />
+          <XAxis dataKey="time" tick={{ fontSize: 9 }} angle={-30} textAnchor="end" height={50} className="text-zinc-400" />
+          <YAxis yAxisId="left" tick={{ fontSize: 10 }} className="text-zinc-400" label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} domain={["dataMin", "dataMax"]} />
+          <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} className="text-zinc-400" label={{ value: "mV", angle: 90, position: "insideRight", style: { fontSize: 10 } }} domain={["dataMin - 50", "dataMax + 50"]} />
+          <Tooltip contentStyle={TOOLTIP_STYLE} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line yAxisId="left" dataKey="closing" name="Zählerstand" stroke="#10b981" strokeWidth={2} dot={false} />
+          <Line yAxisId="left" dataKey="meter_value" name="Zählerstand" stroke="#10b981" strokeWidth={2} dot={false} />
           <Line yAxisId="right" dataKey="battery_mv" name="Batterie (mV)" stroke="#eab308" strokeWidth={2} dot={false} />
+          <Brush dataKey="time" {...BRUSH_STYLE} travellerWidth={8} />
         </ComposedChart>
       </ResponsiveContainer>
     </ChartWrapper>

@@ -196,7 +196,7 @@ export default function DeviceDetailPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DailyConsumptionChart data={dailyData} unit={unit} />
-            <MeterBatteryChart data={dailyData} unit={unit} readings={readings} />
+            <MeterBatteryChart unit={unit} readings={readings} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
