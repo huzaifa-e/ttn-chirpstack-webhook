@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/device/test-eui)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/bin:$PATH\")",
+      "Bash(/usr/bin/grep -oE '<title>[^<]+</title>')",
+      "WebFetch(domain:localhost)",
+      "Bash(/usr/bin/grep -c 'EMONI')",
+      "Bash(/usr/bin/grep -c 'dark')",
+      "Bash(/usr/bin/grep -c 'LoRaWAN')"
+    ]
+  }
+}
