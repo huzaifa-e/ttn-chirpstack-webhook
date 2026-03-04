@@ -10,6 +10,8 @@ services:
       - PORT=8000
       - DB_PATH=/app/data/data.db
       - CHIRPSTACK_WEBHOOK_TOKEN=${CHIRPSTACK_WEBHOOK_TOKEN:-}
+      - TTN_DOWNLINK_API_KEY=${TTN_DOWNLINK_API_KEY:-}
+      - TTN_API_BASE=${TTN_API_BASE:-https://eu1.cloud.thethings.network}
       - UI_TIMEZONE=${UI_TIMEZONE:-Europe/Berlin}
       - UI_DAYS=${UI_DAYS:-30}
     volumes:
