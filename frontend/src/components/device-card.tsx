@@ -11,8 +11,8 @@ import { StatusBadge } from "./status-badge"
 import type { DeviceSummary, DeviceType } from "@/lib/types"
 import { DEVICE_TYPE_CONFIG } from "@/lib/constants"
 import {
-  formatMeterValue,
-  formatBatteryPercent,
+  formatMeterValueRaw,
+  formatBatteryMv,
   formatRSSI,
   estimateDistance,
   formatInterval,
@@ -80,7 +80,6 @@ export const DeviceCard: React.FC<{
   const [isActive, setIsActive] = useState(false)
   const [currentType, setCurrentType] = useState(deviceType)
   const status = getDeviceStatus(device)
-  const batteryPct = formatBatteryPercent(device.battery_mv)
   const config = DEVICE_TYPE_CONFIG[currentType]
 
   const handleTypeChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -93,12 +92,6 @@ export const DeviceCard: React.FC<{
       setCurrentType(deviceType) // revert on error
     }
   }
-
-  // Battery bar color
-  const batteryColor =
-    batteryPct == null ? "#6b7280" :
-    batteryPct > 60 ? "#10b981" :
-    batteryPct > 25 ? "#eab308" : "#ef4444"
 
   return (
     <motion.div
@@ -143,8 +136,9 @@ export const DeviceCard: React.FC<{
                 animate={{ scale: isActive ? 1.03 : 1 }}
                 transition={{ duration: 0.2 }}
               >
-                {formatMeterValue(device.meter_value, currentType)}
+                {formatMeterValueRaw(device.meter_value)}
               </motion.div>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">{config.unit}</p>
             </div>
             {sparklineData.length > 2 && (
               <MiniLineChart data={sparklineData} color={config.color} />
@@ -158,19 +152,9 @@ export const DeviceCard: React.FC<{
                 <Battery size={11} className="text-zinc-400" />
                 <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Batterie</span>
               </div>
-              <div className="relative">
-                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  {batteryPct != null ? `${batteryPct}%` : "—"}
-                </span>
-                {batteryPct != null && (
-                  <div className="mt-1 h-1 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${batteryPct}%`, backgroundColor: batteryColor }}
-                    />
-                  </div>
-                )}
-              </div>
+              <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                {formatBatteryMv(device.battery_mv)}
+              </span>
             </div>
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 mb-1">

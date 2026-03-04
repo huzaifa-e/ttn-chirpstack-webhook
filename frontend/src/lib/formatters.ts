@@ -11,6 +11,13 @@ export function formatMeterValue(value: number | null, deviceType: DeviceType = 
   return `${intPart},${decPart} ${unit}`
 }
 
+/** Returns just the numeric part (comma-separated, no unit) for display */
+export function formatMeterValueRaw(value: number | null): string {
+  if (value == null) return "—"
+  const parts = value.toFixed(3).split(".")
+  return `${parts[0]},${parts[1]}`
+}
+
 export function formatBatteryMv(mv: number | null): string {
   if (mv == null) return "—"
   return `${mv} mV`

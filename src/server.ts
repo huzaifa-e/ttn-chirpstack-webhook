@@ -579,6 +579,12 @@ function sseBroadcast(payload: any) {
   }
 }
 
+// Polling fallback – returns the most recent events so the frontend can
+// pick up new uplinks even when SSE is buffered by a proxy.
+app.get("/api/last-events", (_req, res) => {
+  res.json(lastEvents);
+});
+
 app.get("/events", (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
