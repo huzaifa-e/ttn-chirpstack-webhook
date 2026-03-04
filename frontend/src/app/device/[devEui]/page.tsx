@@ -16,9 +16,8 @@ import { LastUplinkPayload } from "@/components/detail/last-uplink-payload"
 import { ControlsPanel } from "@/components/detail/controls-panel"
 import { DownlinkPanel } from "@/components/detail/downlink-panel"
 import { DataManagement } from "@/components/detail/data-management"
-import { DailyConsumptionChart } from "@/components/detail/daily-consumption-chart"
+import { DailyConsumptionChart, MeterBatteryChart } from "@/components/detail/daily-consumption-chart"
 import { HourlyConsumptionChart } from "@/components/detail/hourly-consumption-chart"
-import { BatteryChart } from "@/components/detail/battery-chart"
 import { BatteryDrainChart } from "@/components/detail/battery-drain-chart"
 import { RSSIChart } from "@/components/detail/rssi-chart"
 import { IMUChart } from "@/components/detail/imu-chart"
@@ -193,15 +192,15 @@ export default function DeviceDetailPage() {
           <DownlinkPanel devEui={devEui} />
         </div>
 
-        {/* Charts */}
+        {/* Charts — always 2 columns per row */}
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DailyConsumptionChart data={dailyData} unit={unit} />
-            <HourlyConsumptionChart readings={readings} unit={unit} />
+            <MeterBatteryChart data={dailyData} unit={unit} readings={readings} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <BatteryChart readings={readings} />
+            <HourlyConsumptionChart readings={readings} unit={unit} />
             <BatteryDrainChart readings={readings} />
           </div>
 
@@ -210,12 +209,17 @@ export default function DeviceDetailPage() {
             <IMUChart uplinks={uplinks} />
           </div>
 
-          {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
-
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
             <AnomalyChart anomalies={anomalies} />
-            <PayloadExplorer uplinks={uplinks} />
+            {deviceType !== "electricity_sml" && <PayloadExplorer uplinks={uplinks} />}
           </div>
+
+          {deviceType === "electricity_sml" && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <PayloadExplorer uplinks={uplinks} />
+            </div>
+          )}
         </div>
 
         {/* Data Management */}

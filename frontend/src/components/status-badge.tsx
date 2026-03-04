@@ -7,14 +7,17 @@ export function StatusBadge({ status }: { status: DeviceStatus }) {
   const config = STATUS_CONFIG[status]
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${config.bgColor}`}
-      style={{ color: config.color }}
+      className="relative flex h-3 w-3"
+      title={config.label}
     >
       <span
-        className="w-1.5 h-1.5 rounded-full"
+        className="absolute inset-0 rounded-full opacity-30 animate-ping"
         style={{ backgroundColor: config.color }}
       />
-      {config.label}
+      <span
+        className="relative inline-flex rounded-full h-3 w-3"
+        style={{ backgroundColor: config.color }}
+      />
     </span>
   )
 }

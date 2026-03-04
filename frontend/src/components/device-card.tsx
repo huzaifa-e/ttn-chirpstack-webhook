@@ -6,7 +6,6 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import { Battery, Clock, Activity, Radio, Timer, MapPin } from "lucide-react"
 import { ProfessionalCard } from "./professional-card"
-import { ConsumptionSparkline } from "./consumption-sparkline"
 import { DeviceIcon } from "./device-icon"
 import { StatusBadge } from "./status-badge"
 import type { DeviceSummary, DeviceType } from "@/lib/types"
@@ -151,17 +150,6 @@ export const DeviceCard: React.FC<{
               <MiniLineChart data={sparklineData} color={config.color} />
             )}
           </div>
-
-          {/* Consumption Mini Chart */}
-          {sparklineData.length > 2 && (
-            <div className="mb-4 rounded-lg border border-zinc-200/50 dark:border-zinc-700/50 bg-gradient-to-br from-zinc-50/50 to-white dark:from-zinc-900/50 dark:to-zinc-800/50 p-2">
-              <ConsumptionSparkline
-                meterValues={sparklineData}
-                height={52}
-                barColor={config.color}
-              />
-            </div>
-          )}
 
           {/* Key Metrics - clean 3-column row */}
           <div className="grid grid-cols-3 gap-3 mb-3">
