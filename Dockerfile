@@ -48,10 +48,12 @@ COPY --from=backend-builder /app/node_modules/.package-lock.json /dev/null* ./
 RUN npm install --no-save tsx
 
 ENV NODE_ENV=production
+# Backend Express server port
 ENV PORT=8000
 
 # Expose both ports: 3000 (frontend), 8000 (backend API)
 EXPOSE 3000 8000
 
 # Start both processes: Express backend + Next.js frontend
-CMD sh -c 'npx tsx src/server.ts & node frontend/server.js & wait'
+# HOSTNAME=0.0.0.0 lets Next.js bind to all interfaces inside Docker
+CMD sh -c 'npx tsx src/server.ts & HOSTNAME=0.0.0.0 PORT=3000 node frontend/server.js & wait'

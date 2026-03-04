@@ -4,6 +4,11 @@ tunnel: 85ec6a21-3485-4ef0-b89b-9ed2b5511c76
 credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
+  # Webhook endpoints go directly to Express backend
   - hostname: lorawan.emoni.cloud
+    path: /webhooks/.*
     service: http://app:8000
+  # Everything else goes through Next.js frontend (which proxies /api/* and /events to backend)
+  - hostname: lorawan.emoni.cloud
+    service: http://app:3000
   - service: http_status:404
