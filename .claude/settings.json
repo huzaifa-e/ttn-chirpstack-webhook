@@ -8,7 +8,26 @@
       "WebFetch(domain:localhost)",
       "Bash(/usr/bin/grep -c 'EMONI')",
       "Bash(/usr/bin/grep -c 'dark')",
-      "Bash(/usr/bin/grep -c 'LoRaWAN')"
+      "Bash(/usr/bin/grep -c 'LoRaWAN')",
+      "Read(//opt/homebrew/Cellar/node@20/20.20.0/bin/**)",
+      "Bash(brew list --versions)",
+      "Bash(/usr/bin/grep -i node)",
+      "Bash(export PATH=\"/opt/homebrew/opt/node@20/bin:/opt/homebrew/bin:$PATH\")",
+      "Bash(npm install)",
+      "Bash(npm start)",
+      "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\" http://localhost:8000/api/devices)",
+      "Bash(npm run dev)",
+      "Bash(/usr/bin/grep -oE 'Keine Geräte|EMONI Dashboard|Geräte werden geladen')",
+      "Bash(curl -s -w \" HTTP:%{http_code}\" http://localhost:8000/api/device-summaries)",
+      "Bash(curl -s -w \" HTTP:%{http_code}\" http://localhost:3000/api/device-summaries)",
+      "Bash(curl -s -w \" HTTP:%{http_code}\" http://localhost:8000/healthz)",
+      "Bash(curl -s http://localhost:3000/api/device-summaries)",
+      "Bash(curl -s http://localhost:3000/api/device-types)",
+      "Bash(curl -s \"http://localhost:3000/api/last-uplink?devEui=0011223344556677\")",
+      "Bash(curl -s \"http://localhost:3000/api/readings?devEui=0011223344556677\")",
+      "Bash(curl -s \"http://localhost:3000/api/consumption/daily?devEui=0011223344556677&days=7\")",
+      "Bash(timeout 3 curl -s -N http://localhost:3000/events)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/device/0011223344556677)"
     ]
   }
 }

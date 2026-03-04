@@ -4,7 +4,11 @@ import { DEVICE_TYPE_CONFIG, STATUS_ACTIVE_MULTIPLIER, STATUS_WARNING_MULTIPLIER
 export function formatMeterValue(value: number | null, deviceType: DeviceType = "unknown"): string {
   if (value == null) return "—"
   const unit = DEVICE_TYPE_CONFIG[deviceType].unit
-  return `${value.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 3 })} ${unit}`
+  // German format: comma as decimal separator, no dot thousands separator
+  const parts = value.toFixed(3).split(".")
+  const intPart = parts[0]
+  const decPart = parts[1]
+  return `${intPart},${decPart} ${unit}`
 }
 
 export function formatBatteryMv(mv: number | null): string {

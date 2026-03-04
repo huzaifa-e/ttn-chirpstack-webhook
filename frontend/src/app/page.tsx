@@ -9,6 +9,7 @@ import { DeviceCard } from "@/components/device-card"
 import { OverviewStats } from "@/components/overview-stats"
 import { SearchModal } from "@/components/search-modal"
 import { LiveIndicator } from "@/components/live-indicator"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { getDeviceSummaries, getDeviceTypes, getReadings } from "@/lib/api"
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
@@ -137,7 +138,10 @@ export default function Home() {
             >
               EMONI Dashboard
             </motion.h1>
-            <LiveIndicator connected={connected} />
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <LiveIndicator connected={connected} />
+            </div>
           </div>
 
           <motion.p

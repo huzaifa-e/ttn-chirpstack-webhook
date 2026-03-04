@@ -18,7 +18,7 @@ export const ProfessionalCard: React.FC<{
         fade={true}
       />
       <div className="relative rounded-2xl bg-white/95 dark:bg-zinc-950/95 backdrop-blur-sm border border-zinc-200/50 dark:border-zinc-800/50">
-        <div className="relative z-10 p-4">{children}</div>
+        <div className="relative z-10 p-5">{children}</div>
       </div>
     </div>
   )
