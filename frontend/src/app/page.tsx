@@ -143,10 +143,12 @@ export default function Home() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <EmoniLogo size={44} className="text-zinc-900 dark:text-zinc-100" />
-              <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 mt-1 tracking-wide">
-                EMONI-LoRaWAN Dashboard
-              </span>
+              <div className="flex items-center gap-3">
+                <EmoniLogo size={44} className="text-zinc-900 dark:text-zinc-100" />
+                <span className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-wide">
+                  EMONI-LoRaWAN Dashboard
+                </span>
+              </div>
             </motion.div>
             <div className="flex items-center gap-3">
               <ThemeToggle />
