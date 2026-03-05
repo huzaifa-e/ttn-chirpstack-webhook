@@ -213,6 +213,8 @@ const ERROR_BITMASK_CODES: BitmaskDef[] = [
   { bit: 63, maskHex: "0x8000000000000000", name: "IC_ERR_HTTP_WEBHOOK_POST_FAIL", category: "OTA/HTTP", description: "Webhook POST to backend failed" },
 ]
 
+const FAILURE_OVERDUE_THRESHOLD_SEC = 40
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null
   return v as Record<string, unknown>
@@ -338,7 +340,8 @@ export function analyzeUplinkFailures(uplinks: Uplink[], expectedIntervalSecInpu
     if (!Number.isFinite(prevMs) || !Number.isFinite(curMs) || curMs <= prevMs) continue
 
     const actualIntervalSec = Math.round((curMs - prevMs) / 1000)
-    if (actualIntervalSec <= expectedIntervalSec) continue
+    const exceededBySec = actualIntervalSec - expectedIntervalSec
+    if (exceededBySec < FAILURE_OVERDUE_THRESHOLD_SEC) continue
 
     const errorEventHex = getHexFromUplink(current, "error_event_hex")
     const warningEventHex = getHexFromUplink(current, "warning_event_hex")
@@ -351,7 +354,7 @@ export function analyzeUplinkFailures(uplinks: Uplink[], expectedIntervalSecInpu
       at: current.at,
       expectedIntervalSec,
       actualIntervalSec,
-      exceededBySec: actualIntervalSec - expectedIntervalSec,
+      exceededBySec,
       errorEventHex,
       warningEventHex,
       infoEventHex,
