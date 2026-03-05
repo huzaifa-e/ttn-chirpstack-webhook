@@ -46,6 +46,9 @@ interface BitmaskDef {
   description: string
 }
 
+
+
+
 const ERROR_EVENT_CODES: Record<string, EventCodeDef> = {
   "0001": { name: "IC_EVENT_ERR_SYS_PSRAM_INIT_FAIL", description: "PSRAM/TENSOR init for system failed at startup" },
   "0002": { name: "IC_EVENT_ERR_SYS_TENSOR_ARENA_INIT_FAIL", description: "Tensor arena initialization failed in main" },

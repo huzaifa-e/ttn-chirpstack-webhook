@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea, ReferenceLine } from "recharts"
 import type { DailyConsumption } from "@/lib/types"
 import { formatChartNumber } from "@/lib/formatters"
@@ -10,18 +10,70 @@ import type { RefObject } from "react"
 const TOOLTIP_STYLE = { fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }
 
 export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]; unit: string }) {
-  const zoom = useChartZoom(data, "date")
+  const [mode, setMode] = useState<"daily" | "monthly" | "yearly">("daily")
+
+  const chartData = useMemo(() => {
+    if (mode === "daily") {
+      return data
+        .filter((d) => d.consumption != null)
+        .map((d) => ({ period: d.date, consumption: d.consumption }))
+    }
+
+    const map = new Map<string, number>()
+    for (const d of data) {
+      if (d.consumption == null) continue
+      const key = mode === "monthly" ? d.date.slice(0, 7) : d.date.slice(0, 4)
+      map.set(key, (map.get(key) ?? 0) + d.consumption)
+    }
+
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([period, consumption]) => ({ period, consumption }))
+  }, [data, mode])
+
+  const zoom = useChartZoom(chartData, "period")
   if (!data.length) return <ChartEmpty label="Tagesverbrauch" />
 
+  const modeLabel = mode === "daily" ? "Tag" : mode === "monthly" ? "Monat" : "Jahr"
+
   return (
-    <ChartWrapper label="Tagesverbrauch" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef} isDragging={zoom.isDragging} onDoubleClick={zoom.onDoubleClick}>
+    <ChartWrapper
+      label="Verbrauch"
+      controls={(
+        <div className="inline-flex rounded-md border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+          <button
+            onClick={(e) => { e.stopPropagation(); setMode("daily"); zoom.resetZoom() }}
+            className={`px-2 py-1 text-[10px] transition-colors ${mode === "daily" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+          >
+            Tag
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setMode("monthly"); zoom.resetZoom() }}
+            className={`px-2 py-1 text-[10px] transition-colors ${mode === "monthly" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+          >
+            Monat
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setMode("yearly"); zoom.resetZoom() }}
+            className={`px-2 py-1 text-[10px] transition-colors ${mode === "yearly" ? "bg-blue-600 text-white" : "bg-white dark:bg-zinc-900 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+          >
+            Jahr
+          </button>
+        </div>
+      )}
+      isZoomed={zoom.isZoomed}
+      onReset={zoom.resetZoom}
+      containerRef={zoom.containerRef}
+      isDragging={zoom.isDragging}
+      onDoubleClick={zoom.onDoubleClick}
+    >
       <ResponsiveContainer width="100%" height={320}>
         <ComposedChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} className="text-zinc-400" />
+          <XAxis dataKey="period" tick={{ fontSize: 10 }} className="text-zinc-400" />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} className="text-zinc-400" label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value, name) => [formatChartNumber(value), String(name)]} />
-          <Bar dataKey="consumption" name={`Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <Bar dataKey="consumption" name={`${modeLabel}-Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
           {zoom.refAreaLeft && zoom.refAreaRight && (
             <>
               <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} stroke="#3b82f6" strokeWidth={1.5} strokeOpacity={0.6} fill="#3b82f6" fillOpacity={0.2} />
@@ -79,6 +131,7 @@ export function MeterBatteryChart({ unit, readings }: { unit: string; readings: 
 interface ChartWrapperProps {
   label: string
   children: React.ReactNode
+  controls?: React.ReactNode
   isZoomed?: boolean
   onReset?: () => void
   containerRef?: RefObject<HTMLDivElement | null>
@@ -86,7 +139,7 @@ interface ChartWrapperProps {
   onDoubleClick?: () => void
 }
 
-function ChartWrapper({ label, children, isZoomed, onReset, containerRef, isDragging, onDoubleClick }: ChartWrapperProps) {
+function ChartWrapper({ label, children, controls, isZoomed, onReset, containerRef, isDragging, onDoubleClick }: ChartWrapperProps) {
   return (
     <div
       ref={containerRef}
@@ -96,6 +149,7 @@ function ChartWrapper({ label, children, isZoomed, onReset, containerRef, isDrag
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{label}</h3>
         <div className="flex items-center gap-2">
+          {controls}
           {isDragging && (
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 animate-pulse">
               Bereich auswählen…
