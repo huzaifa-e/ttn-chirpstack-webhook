@@ -161,7 +161,7 @@ export default function DeviceDetailPage() {
         onMouseLeave={() => setSidebarHovered(false)}
         animate={{ width: sidebarHovered ? 320 : 64 }}
         transition={{ duration: 0.2, ease: "easeInOut" }}
-        className="hidden xl:flex flex-col shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen overflow-hidden"
+        className="flex flex-col shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen overflow-hidden"
       >
         {!sidebarHovered ? (
           <div className="h-full flex items-start justify-center pt-4">
