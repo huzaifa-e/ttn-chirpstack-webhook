@@ -35,6 +35,52 @@ interface ConsumptionPoint {
   simulated: number | null
 }
 
+function buildHistoricalMonthWeights(actualMap: Map<string, number>): Record<number, number> {
+  const byYear = new Map<number, Map<number, number>>()
+
+  for (const [key, value] of actualMap) {
+    const year = parseInt(key.slice(0, 4), 10)
+    const month = parseInt(key.slice(5, 7), 10)
+    if (!byYear.has(year)) byYear.set(year, new Map<number, number>())
+    byYear.get(year)!.set(month, value)
+  }
+
+  const monthShareBuckets = new Map<number, number[]>()
+  for (let m = 1; m <= 12; m++) monthShareBuckets.set(m, [])
+
+  for (const [, months] of byYear) {
+    const yearTotal = Array.from(months.values()).reduce((sum, v) => sum + v, 0)
+    if (yearTotal <= 0) continue
+
+    for (const [month, value] of months) {
+      monthShareBuckets.get(month)!.push(value / yearTotal)
+    }
+  }
+
+  const blended: Record<number, number> = {}
+  let sumWeights = 0
+
+  for (let m = 1; m <= 12; m++) {
+    const samples = monthShareBuckets.get(m) ?? []
+    const historicalAvg = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : null
+    const slp = GAS_SLP_WEIGHTS[m] ?? 1 / 12
+
+    const w = historicalAvg != null
+      ? (historicalAvg * 0.8 + slp * 0.2)
+      : slp
+
+    blended[m] = w
+    sumWeights += w
+  }
+
+  // Normalize to sum=1
+  if (sumWeights > 0) {
+    for (let m = 1; m <= 12; m++) blended[m] = blended[m] / sumWeights
+  }
+
+  return blended
+}
+
 /**
  * Given actual monthly data, estimate annual consumption via the SLP profile,
  * then fill missing months with simulated values.
@@ -44,33 +90,55 @@ function fillMissingMonths(
 ): ConsumptionPoint[] {
   if (actualMap.size === 0) return []
 
+  const monthWeights = buildHistoricalMonthWeights(actualMap)
+
   // Determine year range from actual data
   const allKeys = Array.from(actualMap.keys()).sort()
   const firstYear = parseInt(allKeys[0].slice(0, 4))
   const lastYear = parseInt(allKeys[allKeys.length - 1].slice(0, 4))
 
-  // Estimate annual consumption from actual months using SLP weights
-  let weightedSum = 0
-  let weightTotal = 0
-  for (const [key, val] of actualMap) {
-    const month = parseInt(key.slice(5, 7))
-    const w = GAS_SLP_WEIGHTS[month] ?? 0.05
-    weightedSum += val / w
-    weightTotal += 1
-  }
-  const estimatedAnnual = weightTotal > 0 ? weightedSum / weightTotal : 0
-
-  // Build full month range
-  const result: ConsumptionPoint[] = []
+  // Global annual fallback from observed full/partial years
+  const annualTotals: number[] = []
   for (let y = firstYear; y <= lastYear; y++) {
+    let total = 0
+    let monthsWithData = 0
     for (let m = 1; m <= 12; m++) {
       const key = `${y}-${String(m).padStart(2, "0")}`
-      if (key < allKeys[0] || key > allKeys[allKeys.length - 1]) continue
+      const val = actualMap.get(key)
+      if (val != null) {
+        total += val
+        monthsWithData += 1
+      }
+    }
+    if (monthsWithData > 0) annualTotals.push(total)
+  }
+  const globalAnnual = annualTotals.length
+    ? annualTotals.reduce((a, b) => a + b, 0) / annualTotals.length
+    : 0
+
+  // Build full month range across full years (Jan..Dec), not only between first/last seen month.
+  const result: ConsumptionPoint[] = []
+  for (let y = firstYear; y <= lastYear; y++) {
+    const annualEstimatesForYear: number[] = []
+    for (let m = 1; m <= 12; m++) {
+      const key = `${y}-${String(m).padStart(2, "0")}`
+      const actual = actualMap.get(key)
+      const w = monthWeights[m] ?? GAS_SLP_WEIGHTS[m] ?? (1 / 12)
+      if (actual != null && w > 0) {
+        annualEstimatesForYear.push(actual / w)
+      }
+    }
+    const estimatedAnnualForYear = annualEstimatesForYear.length
+      ? annualEstimatesForYear.reduce((a, b) => a + b, 0) / annualEstimatesForYear.length
+      : globalAnnual
+
+    for (let m = 1; m <= 12; m++) {
+      const key = `${y}-${String(m).padStart(2, "0")}`
       const actual = actualMap.get(key)
       if (actual !== undefined) {
         result.push({ period: key, consumption: actual, simulated: null })
       } else {
-        const sim = estimatedAnnual * (GAS_SLP_WEIGHTS[m] ?? 0.05)
+        const sim = estimatedAnnualForYear * (monthWeights[m] ?? GAS_SLP_WEIGHTS[m] ?? (1 / 12))
         result.push({ period: key, consumption: null, simulated: Math.round(sim * 100) / 100 })
       }
     }
@@ -78,13 +146,15 @@ function fillMissingMonths(
   return result
 }
 
-export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]; unit: string }) {
+export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365 }: { data: DailyConsumption[]; unit: string; dailyWindowDays?: number }) {
   const [mode, setMode] = useState<"daily" | "monthly" | "yearly">("daily")
 
   const chartData = useMemo((): ConsumptionPoint[] => {
     if (mode === "daily") {
       return data
         .filter((d) => d.consumption != null)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-dailyWindowDays)
         .map((d) => ({ period: d.date, consumption: d.consumption, simulated: null }))
     }
 
@@ -109,7 +179,7 @@ export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]
     }
 
     return fillMissingMonths(actualMap)
-  }, [data, mode])
+  }, [data, mode, dailyWindowDays])
 
   const zoom = useChartZoom(chartData, "period")
   if (!data.length) return <ChartEmpty label="Tagesverbrauch" />

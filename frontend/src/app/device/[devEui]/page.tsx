@@ -40,6 +40,7 @@ import { analyzeUplinkFailures } from "@/lib/failure-analysis"
 import type { DeviceSummary, DeviceType, Reading, Uplink, DailyConsumption, Anomaly, SSEEvent } from "@/lib/types"
 
 const CONSUMPTION_DAYS = 365
+const CONSUMPTION_HISTORY_DAYS = 1200
 
 export default function DeviceDetailPage() {
   const params = useParams()
@@ -74,7 +75,7 @@ export default function DeviceDetailPage() {
         getReadings(devEui, fromConsumption, to),
         getUplinks(devEui, from, to),
         getLastUplink(devEui),
-        getDailyConsumption(devEui, CONSUMPTION_DAYS, timezone),
+        getDailyConsumption(devEui, CONSUMPTION_HISTORY_DAYS, timezone),
         getAnomalies(devEui),
       ])
 
@@ -153,6 +154,53 @@ export default function DeviceDetailPage() {
     <div className="min-h-screen flex">
       <BackgroundPlus className="fixed inset-0 opacity-[0.03]" plusColor="#3b82f6" plusSize={60} fade={true} />
 
+      {/* Left sidebar — controls, uplink payload, downlinks */}
+      <aside className="hidden xl:flex flex-col w-80 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen overflow-y-auto">
+        <div className="p-4 space-y-4">
+          {/* Controls */}
+          <div className="space-y-3 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-3">
+            <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Steuerung</h3>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Tage: {days}</label>
+              <input
+                type="range"
+                min={1}
+                max={365}
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Zeitzone</label>
+              <input
+                type="text"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="text-xs px-2 py-1 w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={fetchData}
+              disabled={refreshing}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+              Aktualisieren
+            </button>
+          </div>
+
+          {/* Last Uplink Payload */}
+          <LastUplinkPayload uplink={lastUplink} />
+
+          {/* Downlink Panel */}
+          <DownlinkPanel devEui={devEui} />
+        </div>
+      </aside>
+
       {/* Main content */}
       <div className="relative flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header */}
@@ -200,7 +248,7 @@ export default function DeviceDetailPage() {
         {/* Charts — always 2 columns per row */}
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DailyConsumptionChart data={dailyData} unit={unit} />
+            <DailyConsumptionChart data={dailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
             <MeterBatteryChart unit={unit} readings={readings} />
           </div>
 
@@ -230,53 +278,6 @@ export default function DeviceDetailPage() {
         {/* Data Management */}
         <DataManagement devEui={devEui} onDataChanged={fetchData} />
       </div>
-
-      {/* Right sidebar — controls, uplink payload, downlinks */}
-      <aside className="hidden xl:flex flex-col w-80 shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen overflow-y-auto">
-        <div className="p-4 space-y-4">
-          {/* Controls */}
-          <div className="space-y-3 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-3">
-            <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Steuerung</h3>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Tage: {days}</label>
-              <input
-                type="range"
-                min={1}
-                max={365}
-                value={days}
-                onChange={(e) => setDays(Number(e.target.value))}
-                className="w-full accent-blue-500"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Zeitzone</label>
-              <input
-                type="text"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="text-xs px-2 py-1 w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-
-            <button
-              onClick={fetchData}
-              disabled={refreshing}
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
-              Aktualisieren
-            </button>
-          </div>
-
-          {/* Last Uplink Payload */}
-          <LastUplinkPayload uplink={lastUplink} />
-
-          {/* Downlink Panel */}
-          <DownlinkPanel devEui={devEui} />
-        </div>
-      </aside>
     </div>
   )
 }
