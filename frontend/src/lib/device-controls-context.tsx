@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import type { Uplink } from "./types"
 
 export interface DeviceControlsState {
@@ -14,22 +14,35 @@ export interface DeviceControlsState {
   devEui: string
 }
 
-const DeviceControlsContext = createContext<DeviceControlsState | null>(null)
+interface ContextValue {
+  controls: DeviceControlsState | null
+  setControls: (c: DeviceControlsState | null) => void
+}
 
-export function DeviceControlsProvider({
-  value,
-  children,
-}: {
-  value: DeviceControlsState
-  children: ReactNode
-}) {
+const DeviceControlsContext = createContext<ContextValue>({
+  controls: null,
+  setControls: () => {},
+})
+
+export function DeviceControlsProvider({ children }: { children: ReactNode }) {
+  const [controls, setControls] = useState<DeviceControlsState | null>(null)
   return (
-    <DeviceControlsContext.Provider value={value}>
+    <DeviceControlsContext.Provider value={{ controls, setControls }}>
       {children}
     </DeviceControlsContext.Provider>
   )
 }
 
+/** Read current device controls (used by sidebar) */
 export function useDeviceControls(): DeviceControlsState | null {
-  return useContext(DeviceControlsContext)
+  return useContext(DeviceControlsContext).controls
+}
+
+/** Register device controls from a page (auto-cleans up on unmount) */
+export function useSetDeviceControls(value: DeviceControlsState): void {
+  const { setControls } = useContext(DeviceControlsContext)
+  useEffect(() => {
+    setControls(value)
+    return () => setControls(null)
+  }, [value, setControls])
 }

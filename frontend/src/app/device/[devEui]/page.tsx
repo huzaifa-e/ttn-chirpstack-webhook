@@ -35,7 +35,7 @@ import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
 import { DEVICE_TYPE_CONFIG, DEFAULT_DAYS, DEFAULT_TIMEZONE } from "@/lib/constants"
 import { analyzeUplinkFailures } from "@/lib/failure-analysis"
-import { DeviceControlsProvider } from "@/lib/device-controls-context"
+import { useSetDeviceControls } from "@/lib/device-controls-context"
 import type { DeviceSummary, DeviceType, Reading, Uplink, DailyConsumption, Anomaly, SSEEvent } from "@/lib/types"
 
 const CONSUMPTION_DAYS = 365
@@ -125,6 +125,11 @@ export default function DeviceDetailPage() {
     [uplinks, device?.avg_interval_seconds],
   )
 
+  // Register controls into the shared sidebar context
+  useSetDeviceControls(useMemo(() => ({
+    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui,
+  }), [days, timezone, refreshing, fetchData, lastUplink, devEui]))
+
   if (loading) {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
@@ -149,12 +154,7 @@ export default function DeviceDetailPage() {
 
   const status = getDeviceStatus(device)
 
-  const controlsValue = useMemo(() => ({
-    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui,
-  }), [days, timezone, refreshing, fetchData, lastUplink, devEui])
-
   return (
-    <DeviceControlsProvider value={controlsValue}>
     <div className="min-h-screen">
       <BackgroundPlus className="fixed inset-0 opacity-[0.03]" plusColor="#3b82f6" plusSize={60} fade={true} />
 
@@ -236,6 +236,5 @@ export default function DeviceDetailPage() {
         <DataManagement devEui={devEui} onDataChanged={fetchData} />
       </div>
     </div>
-    </DeviceControlsProvider>
   )
 }
