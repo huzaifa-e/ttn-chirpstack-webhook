@@ -1,25 +1,30 @@
 "use client"
 
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea } from "recharts"
+import { useMemo } from "react"
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea, ReferenceLine } from "recharts"
 import type { Reading } from "@/lib/types"
 import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
 import { useChartZoom } from "./use-chart-zoom"
 
 export function RSSIChart({ readings }: { readings: Reading[] }) {
-  const data = readings
-    .filter((r) => r.rssi != null)
-    .map((r) => ({
-      time: new Date(r.at).toLocaleString("de-DE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
-      rssi: r.rssi,
-      snr: r.snr,
-    }))
+  const data = useMemo(
+    () =>
+      readings
+        .filter((r) => r.rssi != null)
+        .map((r) => ({
+          time: new Date(r.at).toLocaleString("de-DE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+          rssi: r.rssi,
+          snr: r.snr,
+        })),
+    [readings],
+  )
 
   const zoom = useChartZoom(data, "time")
   if (!data.length) return <ChartEmpty label="RSSI & SNR" />
 
   return (
-    <ChartWrapper label="RSSI & SNR" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef}>
+    <ChartWrapper label="RSSI & SNR" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef} isDragging={zoom.isDragging} onDoubleClick={zoom.onDoubleClick}>
       <ResponsiveContainer width="100%" height={250}>
         <LineChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
@@ -28,10 +33,14 @@ export function RSSIChart({ readings }: { readings: Reading[] }) {
           <YAxis yAxisId="snr" orientation="right" tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} label={{ value: "dB", angle: 90, position: "insideRight", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value, name) => [formatChartNumber(value), String(name)]} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line yAxisId="rssi" dataKey="rssi" name="RSSI (dBm)" stroke="#3b82f6" strokeWidth={2} dot={false} />
-          <Line yAxisId="snr" dataKey="snr" name="SNR (dB)" stroke="#f97316" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+          <Line yAxisId="rssi" dataKey="rssi" name="RSSI (dBm)" stroke="#3b82f6" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Line yAxisId="snr" dataKey="snr" name="SNR (dB)" stroke="#f97316" strokeWidth={1.5} dot={false} strokeDasharray="4 2" isAnimationActive={false} />
           {zoom.refAreaLeft && zoom.refAreaRight && (
-            <ReferenceArea yAxisId="rssi" x1={zoom.refAreaLeft} x2={zoom.refAreaRight} strokeOpacity={0.3} fill="#3b82f6" fillOpacity={0.15} />
+            <>
+              <ReferenceArea yAxisId="rssi" x1={zoom.refAreaLeft} x2={zoom.refAreaRight} stroke="#3b82f6" strokeWidth={1.5} strokeOpacity={0.6} fill="#3b82f6" fillOpacity={0.2} />
+              <ReferenceLine x={zoom.refAreaLeft} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 2" />
+              <ReferenceLine x={zoom.refAreaRight} stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 2" />
+            </>
           )}
         </LineChart>
       </ResponsiveContainer>

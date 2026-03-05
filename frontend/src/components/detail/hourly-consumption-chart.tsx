@@ -1,6 +1,7 @@
 "use client"
 
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea } from "recharts"
+import { useMemo } from "react"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea, ReferenceLine } from "recharts"
 import type { Reading } from "@/lib/types"
 import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
@@ -34,21 +35,25 @@ function computeHourly(readings: Reading[]): HourlyPoint[] {
 }
 
 export function HourlyConsumptionChart({ readings, unit }: { readings: Reading[]; unit: string }) {
-  const data = computeHourly(readings)
+  const data = useMemo(() => computeHourly(readings), [readings])
   const zoom = useChartZoom(data, "hour")
   if (!data.length) return <ChartEmpty label="Stündlicher Verbrauch" />
 
   return (
-    <ChartWrapper label="Stündlicher Verbrauch" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef}>
+    <ChartWrapper label="Stündlicher Verbrauch" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef} isDragging={zoom.isDragging} onDoubleClick={zoom.onDoubleClick}>
       <ResponsiveContainer width="100%" height={250}>
         <BarChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="hour" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value, name) => [formatChartNumber(value), String(name)]} />
-          <Bar dataKey="consumption" name={`Verbrauch (${unit})`} fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="consumption" name={`Verbrauch (${unit})`} fill="#8b5cf6" radius={[3, 3, 0, 0]} isAnimationActive={false} />
           {zoom.refAreaLeft && zoom.refAreaRight && (
-            <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} strokeOpacity={0.3} fill="#8b5cf6" fillOpacity={0.15} />
+            <>
+              <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} stroke="#8b5cf6" strokeWidth={1.5} strokeOpacity={0.6} fill="#8b5cf6" fillOpacity={0.2} />
+              <ReferenceLine x={zoom.refAreaLeft} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 2" />
+              <ReferenceLine x={zoom.refAreaRight} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 2" />
+            </>
           )}
         </BarChart>
       </ResponsiveContainer>
