@@ -244,11 +244,6 @@ export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365 }: { d
           )}
         </ComposedChart>
       </ResponsiveContainer>
-      {hasSimulated && (
-        <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-1.5 text-center">
-          ⚠ Gelbe Balken = Prognose nach BDEW-Standardlastprofil (SLP H0) · basierend auf vorhandenen Messdaten hochgerechnet
-        </p>
-      )}
     </ChartWrapper>
   )
 }
