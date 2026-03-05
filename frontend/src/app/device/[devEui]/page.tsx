@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
 
 import { BackgroundPlus } from "@/demos/background-plus"
@@ -37,6 +37,7 @@ import {
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
 import { DEVICE_TYPE_CONFIG, DEFAULT_DAYS, DEFAULT_TIMEZONE } from "@/lib/constants"
+import { analyzeUplinkFailures } from "@/lib/failure-analysis"
 import type { DeviceSummary, DeviceType, Reading, Uplink, DailyConsumption, Anomaly, SSEEvent } from "@/lib/types"
 
 export default function DeviceDetailPage() {
@@ -114,6 +115,10 @@ export default function DeviceDetailPage() {
   const { connected } = useSSE(handleSSE)
 
   const unit = DEVICE_TYPE_CONFIG[deviceType].unit
+  const failureAnalysis = useMemo(
+    () => analyzeUplinkFailures(uplinks, device?.avg_interval_seconds ?? null),
+    [uplinks, device?.avg_interval_seconds],
+  )
 
   if (loading) {
     return (
@@ -174,7 +179,17 @@ export default function DeviceDetailPage() {
         </motion.div>
 
         {/* KPI Cards */}
-        <KPICards device={device} deviceType={deviceType} />
+        <KPICards device={device} deviceType={deviceType} failureCount={failureAnalysis.failures.length} />
+
+        <div className="flex justify-end">
+          <Link
+            href={`/device/${encodeURIComponent(devEui)}/failures`}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-400 bg-red-50/60 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-sm font-medium transition-colors"
+          >
+            <AlertTriangle size={16} />
+            Failure-Logs öffnen ({failureAnalysis.failures.length})
+          </Link>
+        </div>
 
         {/* Controls */}
         <ControlsPanel

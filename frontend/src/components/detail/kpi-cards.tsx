@@ -1,7 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { motion } from "framer-motion"
-import { Clock, Battery, Radio, Gauge, Timer, Activity } from "lucide-react"
+import { Clock, Battery, Radio, Gauge, Timer, Activity, AlertTriangle } from "lucide-react"
 import type { DeviceSummary, DeviceType } from "@/lib/types"
 import {
   formatMeterValue,
@@ -28,16 +29,12 @@ interface KPICardProps {
   sub?: string
   color?: string
   delay?: number
+  href?: string
 }
 
-function KPICard({ icon, label, value, sub, color, delay = 0 }: KPICardProps) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay }}
-      className="rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm p-4"
-    >
+function KPICard({ icon, label, value, sub, color, delay = 0, href }: KPICardProps) {
+  const content = (
+    <>
       <div className="flex items-center gap-2 mb-2">
         <span style={{ color: color || "#6b7280" }}>{icon}</span>
         <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">
@@ -46,6 +43,21 @@ function KPICard({ icon, label, value, sub, color, delay = 0 }: KPICardProps) {
       </div>
       <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{value}</div>
       {sub && <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{sub}</div>}
+    </>
+  )
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay }}
+      className="rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm p-4"
+    >
+      {href ? (
+        <Link href={href} className="block rounded-lg hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40 -m-2 p-2 transition-colors">
+          {content}
+        </Link>
+      ) : content}
     </motion.div>
   )
 }
@@ -53,14 +65,16 @@ function KPICard({ icon, label, value, sub, color, delay = 0 }: KPICardProps) {
 export function KPICards({
   device,
   deviceType,
+  failureCount = 0,
 }: {
   device: DeviceSummary
   deviceType: DeviceType
+  failureCount?: number
 }) {
   const batteryPct = formatBatteryPercent(device.battery_mv)
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
       <KPICard
         icon={<Clock size={16} />}
         label="Zuletzt gesehen"
@@ -104,6 +118,15 @@ export function KPICards({
         value={String(device.total_uplinks)}
         sub={device.first_seen ? `Seit ${new Date(device.first_seen).toLocaleDateString("de-DE")}` : undefined}
         delay={0.25}
+      />
+      <KPICard
+        icon={<AlertTriangle size={16} />}
+        label="Upload-Fehler"
+        value={String(failureCount)}
+        sub="Intervall überschritten"
+        color={failureCount > 0 ? "#ef4444" : "#22c55e"}
+        delay={0.3}
+        href={`/device/${encodeURIComponent(device.dev_eui)}/failures`}
       />
     </div>
   )

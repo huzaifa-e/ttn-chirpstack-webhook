@@ -6,8 +6,6 @@ import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   LayoutDashboard,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react"
 import { EmoniLogo } from "./emoni-logo"
 
@@ -17,16 +15,19 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const collapsed = !hovered
 
   return (
     <motion.aside
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className="sticky top-0 h-screen flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl z-30 shrink-0"
       animate={{ width: collapsed ? 64 : 220 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
     >
       {/* Logo area */}
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-zinc-200 dark:border-zinc-800 min-h-[72px]">
+      <Link href="/" className="flex items-center gap-3 px-4 py-5 border-b border-zinc-200 dark:border-zinc-800 min-h-[72px]">
         <EmoniLogo size={36} className="shrink-0" />
         <AnimatePresence>
           {!collapsed && (
@@ -46,7 +47,7 @@ export function Sidebar() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </Link>
 
       {/* Nav items */}
       <nav className="flex-1 px-2 py-3 space-y-1">
@@ -81,32 +82,6 @@ export function Sidebar() {
           )
         })}
       </nav>
-
-      {/* Collapse toggle */}
-      <div className="px-2 py-3 border-t border-zinc-200 dark:border-zinc-800">
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors ${
-            collapsed ? "justify-center" : ""
-          }`}
-          title={collapsed ? "Sidebar ausklappen" : "Sidebar einklappen"}
-        >
-          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.15 }}
-                className="overflow-hidden whitespace-nowrap"
-              >
-                Einklappen
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </button>
-      </div>
     </motion.aside>
   )
 }
