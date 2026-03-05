@@ -273,8 +273,8 @@ function decodeErrorBitmask(hex: string | null): DecodedBitmaskFlag[] {
     const value = BigInt(`0x${hex}`)
     const active: DecodedBitmaskFlag[] = []
     for (const def of ERROR_BITMASK_CODES) {
-      const mask = 1n << BigInt(def.bit)
-      if ((value & mask) !== 0n) {
+      const mask = BigInt(1) << BigInt(def.bit)
+      if ((value & mask) !== BigInt(0)) {
         active.push({
           bit: def.bit,
           maskHex: def.maskHex,
