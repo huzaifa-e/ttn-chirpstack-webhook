@@ -138,16 +138,19 @@ export default function Home() {
         <div className="mb-8 sm:mb-10">
           <div className="flex items-center justify-between mb-4">
             <motion.div
-              className="flex flex-col"
+              className="flex items-center gap-4"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
             >
-              <div className="flex items-center gap-3">
-                <EmoniLogo size={44} className="text-zinc-900 dark:text-zinc-100" />
-                <span className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-wide">
-                  EMONI-LoRaWAN Dashboard
-                </span>
+              <EmoniLogo size={64} className="text-zinc-900 dark:text-zinc-100" />
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-zinc-100 tracking-wide leading-tight">
+                  EMONI-LoRaWAN
+                </h1>
+                <p className="text-base sm:text-lg text-zinc-400 dark:text-zinc-500 font-medium">
+                  Dashboard
+                </p>
               </div>
             </motion.div>
             <div className="flex items-center gap-3">
@@ -155,15 +158,6 @@ export default function Home() {
               <LiveIndicator connected={connected} />
             </div>
           </div>
-
-          <motion.p
-            className="text-sm text-zinc-500 dark:text-zinc-400 mb-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            LoRaWAN Geräte-Monitoring und Analyse
-          </motion.p>
 
           {/* Stats + Controls */}
           <div className="flex flex-wrap items-center justify-between gap-4">

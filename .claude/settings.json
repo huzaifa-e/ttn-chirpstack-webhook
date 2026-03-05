@@ -27,7 +27,29 @@
       "Bash(curl -s \"http://localhost:3000/api/readings?devEui=0011223344556677\")",
       "Bash(curl -s \"http://localhost:3000/api/consumption/daily?devEui=0011223344556677&days=7\")",
       "Bash(timeout 3 curl -s -N http://localhost:3000/events)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/device/0011223344556677)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/device/0011223344556677)",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan\" -type f -name \"*.json\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" -o -name \"*.jsx\" -o -name \"*.js\" \\\\\\))",
+      "Bash(ls -la \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src\")",
+      "Bash(ls -la \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src/components\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend\" -maxdepth 2 -name \"tailwind.config.*\" -o -name \"next.config.*\")",
+      "Bash(ls -la \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src/components/detail\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend\" -maxdepth 1 -type f -name \"tailwind.config.*\" -o -name \"next.config.*\")",
+      "Bash(cat \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/next.config.ts\")",
+      "Bash(cat \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/tailwind.config.js\")",
+      "Bash(cat \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/tailwind.config.ts\")",
+      "Bash(ls \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend\")",
+      "Bash(ls -la \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend\")",
+      "Bash(cat \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/postcss.config.js\")",
+      "Bash(cat \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/postcss.config.ts\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan\" -not -path \"*/node_modules/*\" -not -path \"*/.next/*\" -type f -name \"*.tsx\" -o -name \"*.ts\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) ! -path \"*/node_modules/*\")",
+      "Bash(ls -la \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src/components/ui\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src\" -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\))",
+      "Bash(cat \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src/app/device/\\\\[devEui\\\\]/page.tsx\")",
+      "Bash(find \"/Users/HuzaifaEjaz/Documents/ISIS-IC-Projekts/\\(12\\) EMONI APIs/ttn-lorawan/frontend/src\" -type f -name \"*.tsx\")",
+      "Bash(npx next build)",
+      "Bash(export PATH=\"/usr/local/bin:/opt/homebrew/bin:$PATH\")"
     ]
   }
 }
