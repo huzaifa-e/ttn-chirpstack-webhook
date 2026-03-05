@@ -9,32 +9,113 @@ import type { RefObject } from "react"
 
 const TOOLTIP_STYLE = { fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }
 
+/**
+ * German gas SLP (Standardlastprofil) monthly distribution weights.
+ * Represents approximate % of annual gas consumption per month (heating-dominated).
+ * Source: BDEW / SLP H0 profile for German households.
+ */
+const GAS_SLP_WEIGHTS: Record<number, number> = {
+  1: 0.17,   // Jan
+  2: 0.14,   // Feb
+  3: 0.11,   // Mar
+  4: 0.08,   // Apr
+  5: 0.04,   // May
+  6: 0.02,   // Jun
+  7: 0.015,  // Jul
+  8: 0.015,  // Aug
+  9: 0.03,   // Sep
+  10: 0.08,  // Oct
+  11: 0.12,  // Nov
+  12: 0.16,  // Dec
+}
+
+interface ConsumptionPoint {
+  period: string
+  consumption: number | null
+  simulated: number | null
+}
+
+/**
+ * Given actual monthly data, estimate annual consumption via the SLP profile,
+ * then fill missing months with simulated values.
+ */
+function fillMissingMonths(
+  actualMap: Map<string, number>,
+): ConsumptionPoint[] {
+  if (actualMap.size === 0) return []
+
+  // Determine year range from actual data
+  const allKeys = Array.from(actualMap.keys()).sort()
+  const firstYear = parseInt(allKeys[0].slice(0, 4))
+  const lastYear = parseInt(allKeys[allKeys.length - 1].slice(0, 4))
+
+  // Estimate annual consumption from actual months using SLP weights
+  let weightedSum = 0
+  let weightTotal = 0
+  for (const [key, val] of actualMap) {
+    const month = parseInt(key.slice(5, 7))
+    const w = GAS_SLP_WEIGHTS[month] ?? 0.05
+    weightedSum += val / w
+    weightTotal += 1
+  }
+  const estimatedAnnual = weightTotal > 0 ? weightedSum / weightTotal : 0
+
+  // Build full month range
+  const result: ConsumptionPoint[] = []
+  for (let y = firstYear; y <= lastYear; y++) {
+    for (let m = 1; m <= 12; m++) {
+      const key = `${y}-${String(m).padStart(2, "0")}`
+      if (key < allKeys[0] || key > allKeys[allKeys.length - 1]) continue
+      const actual = actualMap.get(key)
+      if (actual !== undefined) {
+        result.push({ period: key, consumption: actual, simulated: null })
+      } else {
+        const sim = estimatedAnnual * (GAS_SLP_WEIGHTS[m] ?? 0.05)
+        result.push({ period: key, consumption: null, simulated: Math.round(sim * 100) / 100 })
+      }
+    }
+  }
+  return result
+}
+
 export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]; unit: string }) {
   const [mode, setMode] = useState<"daily" | "monthly" | "yearly">("daily")
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo((): ConsumptionPoint[] => {
     if (mode === "daily") {
       return data
         .filter((d) => d.consumption != null)
-        .map((d) => ({ period: d.date, consumption: d.consumption }))
+        .map((d) => ({ period: d.date, consumption: d.consumption, simulated: null }))
     }
 
-    const map = new Map<string, number>()
+    if (mode === "yearly") {
+      const map = new Map<string, number>()
+      for (const d of data) {
+        if (d.consumption == null) continue
+        const key = d.date.slice(0, 4)
+        map.set(key, (map.get(key) ?? 0) + d.consumption)
+      }
+      return Array.from(map.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([period, consumption]) => ({ period, consumption, simulated: null }))
+    }
+
+    // Monthly: aggregate actual data, then fill gaps with SLP simulation
+    const actualMap = new Map<string, number>()
     for (const d of data) {
       if (d.consumption == null) continue
-      const key = mode === "monthly" ? d.date.slice(0, 7) : d.date.slice(0, 4)
-      map.set(key, (map.get(key) ?? 0) + d.consumption)
+      const key = d.date.slice(0, 7)
+      actualMap.set(key, (actualMap.get(key) ?? 0) + d.consumption)
     }
 
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([period, consumption]) => ({ period, consumption }))
+    return fillMissingMonths(actualMap)
   }, [data, mode])
 
   const zoom = useChartZoom(chartData, "period")
   if (!data.length) return <ChartEmpty label="Tagesverbrauch" />
 
   const modeLabel = mode === "daily" ? "Tag" : mode === "monthly" ? "Monat" : "Jahr"
+  const hasSimulated = mode === "monthly" && chartData.some((d) => d.simulated != null)
 
   return (
     <ChartWrapper
@@ -72,8 +153,18 @@ export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="period" tick={{ fontSize: 10 }} className="text-zinc-400" />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} className="text-zinc-400" label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value, name) => [formatChartNumber(value), String(name)]} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value, name) => {
+              const label = String(name).includes("Prognose") ? `${formatChartNumber(value)} (SLP)` : formatChartNumber(value)
+              return [label, String(name)]
+            }}
+          />
+          {hasSimulated && <Legend wrapperStyle={{ fontSize: 11 }} />}
           <Bar dataKey="consumption" name={`${modeLabel}-Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          {hasSimulated && (
+            <Bar dataKey="simulated" name={`Prognose / SLP (${unit})`} fill="#f59e0b" radius={[4, 4, 0, 0]} isAnimationActive={false} fillOpacity={0.7} />
+          )}
           {zoom.refAreaLeft && zoom.refAreaRight && (
             <>
               <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} stroke="#3b82f6" strokeWidth={1.5} strokeOpacity={0.6} fill="#3b82f6" fillOpacity={0.2} />
@@ -83,6 +174,11 @@ export function DailyConsumptionChart({ data, unit }: { data: DailyConsumption[]
           )}
         </ComposedChart>
       </ResponsiveContainer>
+      {hasSimulated && (
+        <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-1.5 text-center">
+          ⚠ Gelbe Balken = Prognose nach BDEW-Standardlastprofil (SLP H0) · basierend auf vorhandenen Messdaten hochgerechnet
+        </p>
+      )}
     </ChartWrapper>
   )
 }

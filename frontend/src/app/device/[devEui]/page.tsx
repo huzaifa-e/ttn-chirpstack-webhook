@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { ArrowLeft, AlertTriangle } from "lucide-react"
+import { ArrowLeft, AlertTriangle, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 import { BackgroundPlus } from "@/demos/background-plus"
@@ -13,7 +13,6 @@ import { StatusBadge } from "@/components/status-badge"
 import { LiveIndicator } from "@/components/live-indicator"
 import { KPICards } from "@/components/detail/kpi-cards"
 import { LastUplinkPayload } from "@/components/detail/last-uplink-payload"
-import { ControlsPanel } from "@/components/detail/controls-panel"
 import { DownlinkPanel } from "@/components/detail/downlink-panel"
 import { DataManagement } from "@/components/detail/data-management"
 import { DailyConsumptionChart, MeterBatteryChart } from "@/components/detail/daily-consumption-chart"
@@ -40,6 +39,8 @@ import { DEVICE_TYPE_CONFIG, DEFAULT_DAYS, DEFAULT_TIMEZONE } from "@/lib/consta
 import { analyzeUplinkFailures } from "@/lib/failure-analysis"
 import type { DeviceSummary, DeviceType, Reading, Uplink, DailyConsumption, Anomaly, SSEEvent } from "@/lib/types"
 
+const CONSUMPTION_DAYS = 365
+
 export default function DeviceDetailPage() {
   const params = useParams()
   const devEui = decodeURIComponent(params.devEui as string)
@@ -47,6 +48,7 @@ export default function DeviceDetailPage() {
   const [device, setDevice] = useState<DeviceSummary | null>(null)
   const [deviceType, setDeviceType] = useState<DeviceType>("unknown")
   const [readings, setReadings] = useState<Reading[]>([])
+  const [consumptionReadings, setConsumptionReadings] = useState<Reading[]>([])
   const [uplinks, setUplinks] = useState<Uplink[]>([])
   const [lastUplink, setLastUplink] = useState<Uplink | null>(null)
   const [dailyData, setDailyData] = useState<DailyConsumption[]>([])
@@ -62,15 +64,17 @@ export default function DeviceDetailPage() {
     try {
       const now = new Date()
       const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString()
+      const fromConsumption = new Date(now.getTime() - CONSUMPTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       const to = now.toISOString()
 
-      const [summaries, types, readingsData, uplinksData, lastUp, daily, anomalyData] = await Promise.all([
+      const [summaries, types, readingsData, consumptionReadingsData, uplinksData, lastUp, daily, anomalyData] = await Promise.all([
         getDeviceSummaries(),
         getDeviceTypes(),
         getReadings(devEui, from, to),
+        getReadings(devEui, fromConsumption, to),
         getUplinks(devEui, from, to),
         getLastUplink(devEui),
-        getDailyConsumption(devEui, days, timezone),
+        getDailyConsumption(devEui, CONSUMPTION_DAYS, timezone),
         getAnomalies(devEui),
       ])
 
@@ -78,6 +82,7 @@ export default function DeviceDetailPage() {
       setDevice(dev)
       setDeviceType(types[devEui] || "unknown")
       setReadings(readingsData)
+      setConsumptionReadings(consumptionReadingsData)
       setUplinks(uplinksData)
       setLastUplink(lastUp)
       setDailyData(daily.series)
@@ -145,10 +150,11 @@ export default function DeviceDetailPage() {
   const status = getDeviceStatus(device)
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen flex">
       <BackgroundPlus className="fixed inset-0 opacity-[0.03]" plusColor="#3b82f6" plusSize={60} fade={true} />
 
-      <div className="relative max-w-7xl mx-auto space-y-6">
+      {/* Main content */}
+      <div className="relative flex-1 min-w-0 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -191,22 +197,6 @@ export default function DeviceDetailPage() {
           </Link>
         </div>
 
-        {/* Controls */}
-        <ControlsPanel
-          days={days}
-          onDaysChange={setDays}
-          timezone={timezone}
-          onTimezoneChange={setTimezone}
-          onRefresh={fetchData}
-          loading={refreshing}
-        />
-
-        {/* Last Uplink + Downlinks side by side */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <LastUplinkPayload uplink={lastUplink} />
-          <DownlinkPanel devEui={devEui} />
-        </div>
-
         {/* Charts — always 2 columns per row */}
         <div className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -215,7 +205,7 @@ export default function DeviceDetailPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <HourlyConsumptionChart readings={readings} unit={unit} />
+            <HourlyConsumptionChart readings={consumptionReadings} unit={unit} />
             <BatteryDrainChart readings={readings} />
           </div>
 
@@ -240,6 +230,53 @@ export default function DeviceDetailPage() {
         {/* Data Management */}
         <DataManagement devEui={devEui} onDataChanged={fetchData} />
       </div>
+
+      {/* Right sidebar — controls, uplink payload, downlinks */}
+      <aside className="hidden xl:flex flex-col w-80 shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 backdrop-blur-xl sticky top-0 h-screen overflow-y-auto">
+        <div className="p-4 space-y-4">
+          {/* Controls */}
+          <div className="space-y-3 rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-3">
+            <h3 className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Steuerung</h3>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Tage: {days}</label>
+              <input
+                type="range"
+                min={1}
+                max={365}
+                value={days}
+                onChange={(e) => setDays(Number(e.target.value))}
+                className="w-full accent-blue-500"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">Zeitzone</label>
+              <input
+                type="text"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="text-xs px-2 py-1 w-full rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={fetchData}
+              disabled={refreshing}
+              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+              Aktualisieren
+            </button>
+          </div>
+
+          {/* Last Uplink Payload */}
+          <LastUplinkPayload uplink={lastUplink} />
+
+          {/* Downlink Panel */}
+          <DownlinkPanel devEui={devEui} />
+        </div>
+      </aside>
     </div>
   )
 }
