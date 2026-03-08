@@ -30,6 +30,10 @@ export interface UploadFailureLog {
   decodedWarningEvent: DecodedHexEvent | null
   decodedInfoEvent: DecodedHexEvent | null
   decodedErrorFlags: DecodedBitmaskFlag[]
+  previousMeterValue: number | null
+  previousMeterValueRaw: string | null
+  currentMeterValue: number | null
+  currentMeterValueRaw: string | null
   payload: Record<string, unknown> | null
 }
 
@@ -365,6 +369,10 @@ export function analyzeUplinkFailures(uplinks: Uplink[], expectedIntervalSecInpu
       decodedWarningEvent: decodeEventBySeverity(warningEventHex, "WARN"),
       decodedInfoEvent: decodeEventBySeverity(infoEventHex, "INFO"),
       decodedErrorFlags: decodeErrorBitmask(errorEventHex),
+      previousMeterValue: prev.meter_value,
+      previousMeterValueRaw: prev.meter_value_raw,
+      currentMeterValue: current.meter_value,
+      currentMeterValueRaw: current.meter_value_raw,
       payload: asRecord(current.decoded_json) ?? asRecord(current.payload_json),
     })
   }

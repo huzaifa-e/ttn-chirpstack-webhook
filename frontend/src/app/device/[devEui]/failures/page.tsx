@@ -86,6 +86,23 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
+              <div className="text-[11px] uppercase text-zinc-500 mb-1">Last Meter Reading (previous uplink)</div>
+              <div className="font-mono text-zinc-800 dark:text-zinc-200">{log.previousMeterValue != null ? log.previousMeterValue : "—"}</div>
+              {log.previousMeterValueRaw && (
+                <div className="text-zinc-500 mt-1">raw: {log.previousMeterValueRaw}</div>
+              )}
+            </div>
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
+              <div className="text-[11px] uppercase text-zinc-500 mb-1">Current Meter Reading (this uplink)</div>
+              <div className="font-mono text-zinc-800 dark:text-zinc-200">{log.currentMeterValue != null ? log.currentMeterValue : "—"}</div>
+              {log.currentMeterValueRaw && (
+                <div className="text-zinc-500 mt-1">raw: {log.currentMeterValueRaw}</div>
+              )}
+            </div>
+          </div>
+
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
             <div className="text-[11px] uppercase text-zinc-500 mb-2">Error Bitmask Flags</div>
             {!log.decodedErrorFlags.length ? (
