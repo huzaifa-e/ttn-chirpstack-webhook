@@ -108,7 +108,7 @@ async function main() {
   // PAGE 1 – DESIGN TOKENS
   // ============================================================
   const tokensPage = figma.currentPage;
-  tokensPage.name = "🎨 Design Tokens";
+  tokensPage.name = "Design Tokens";
   figma.currentPage = tokensPage;
 
   // Section title
@@ -193,7 +193,7 @@ async function main() {
   // PAGE 2 – COMPONENTS
   // ============================================================
   const compPage = figma.createPage();
-  compPage.name = "🧩 Components";
+  compPage.name = "Components";
   figma.currentPage = compPage;
 
   let cx = 40, cy = 40;
@@ -384,7 +384,7 @@ async function main() {
   // PAGE 3 – OVERVIEW PAGE
   // ============================================================
   const ovPage = figma.createPage();
-  ovPage.name = "📱 Overview Page";
+  ovPage.name = "Overview Page";
   figma.currentPage = ovPage;
 
   const ovFrame = makeFrame("Overview – 1440px", 1440, 980, C.bg);
@@ -464,7 +464,7 @@ async function main() {
   // PAGE 4 – DETAIL PAGE
   // ============================================================
   const dtPage = figma.createPage();
-  dtPage.name = "📊 Detail Page";
+  dtPage.name = "Detail Page";
   figma.currentPage = dtPage;
 
   const dtFrame = makeFrame("Detail – 1440px", 1440, 1320, C.bg);
@@ -491,7 +491,7 @@ async function main() {
   const backBtn = makeFrame("Back Button", 196, 34, C.card, 8);
   addBorder(backBtn, C.border);
   add(dtFrame, backBtn, 24, 76);
-  add(backBtn, makeText("← Zurück zur Übersicht", 13, "Medium", C.grayLight), 14, 9);
+  add(backBtn, makeText("Zurück zur Übersicht", 13, "Medium", C.grayLight), 14, 9);
 
   // Hero
   const hero = makeFrame("Hero", 1392, 100, C.card, 12);
@@ -612,8 +612,8 @@ async function main() {
 
 main()
   .then(function() {
-    figma.closePlugin("✅ EMONI Dashboard imported! 4 pages created: Design Tokens · Components · Overview · Detail");
+    figma.closePlugin("EMONI Dashboard imported! 4 pages created: Design Tokens · Components · Overview · Detail");
   })
   .catch(function(err) {
-    figma.closePlugin("❌ Error: " + String(err && err.message ? err.message : err));
+    figma.closePlugin("Error: " + String(err && err.message ? err.message : err));
   });

@@ -159,7 +159,7 @@ export default function DeviceDetailPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
           <p className="text-zinc-500 mb-4">Gerät nicht gefunden: {deviceUuid}</p>
-          <Link href="/" className="text-blue-500 hover:underline text-sm">← Zurück zur Übersicht</Link>
+          <Link href="/" className="text-blue-500 hover:underline text-sm inline-flex items-center gap-1"><ArrowLeft size={14} /> Zurück zur Übersicht</Link>
         </div>
       </div>
     )

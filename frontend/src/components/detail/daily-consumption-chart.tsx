@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea, ReferenceLine } from "recharts"
-import { Maximize2, X } from "lucide-react"
+import { Maximize2, X, Undo2 } from "lucide-react"
 import type { DailyConsumption } from "@/lib/types"
 import { formatChartNumber } from "@/lib/formatters"
 import { useChartZoom } from "./use-chart-zoom"
@@ -340,7 +340,7 @@ function ChartWrapper({ label, children, controls, isZoomed, onReset, containerR
             onClick={(e) => { e.stopPropagation(); onReset(); }}
             className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
           >
-            ↩ Zoom zurücksetzen
+            <Undo2 size={10} className="inline mr-0.5" /> Zoom zurücksetzen
           </button>
         )}
         {expanded ? (

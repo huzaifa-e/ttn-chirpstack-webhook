@@ -565,7 +565,7 @@
 
   <!-- ===== DETAIL PAGE ===== -->
   <div id="pageDetail" class="page">
-    <button class="detail-back" onclick="showPage('overview')">← Zurück zur Übersicht</button>
+    <button class="detail-back" onclick="showPage('overview')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>Zurück zur Übersicht</button>
 
     <div class="detail-hero">
       <div class="detail-hero-img">
@@ -650,7 +650,7 @@
       </select>
       <label>fPort</label>
       <input id="downlinkFPort" type="number" min="1" max="255" step="1" value="15" style="width:70px" />
-      <button class="btn btn-primary" id="setUploadInterval">⏱ Intervall setzen</button>
+      <button class="btn btn-primary" id="setUploadInterval"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Intervall setzen</button>
       <span style="color:var(--ttn-border);font-size:18px;margin:0 4px">│</span>
       <button class="btn btn-danger" id="sendRecalibrate" title="Sendet {recalibrate: 1} als Downlink">⟳ Rekalibrierung senden</button>
     </div>
@@ -1753,8 +1753,8 @@ async function loadAnomalySeries() {
 
     // table of recent anomalies
     const typeLabels = {
-      overshoot: '<span style="color:var(--ttn-red)">⚠ Overshoot</span>',
-      manual_recalibrate: '<span style="color:var(--ttn-accent)">🔧 Manuell</span>',
+      overshoot: '<span style="color:var(--ttn-red)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg> Overshoot</span>',
+      manual_recalibrate: '<span style="color:var(--ttn-accent)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:2px"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Manuell</span>',
       auto_recalibrate: '<span style="color:var(--ttn-yellow)">⟳ Auto</span>',
     };
     const rows = anomalies.slice(0, 30).map(a => {
@@ -1934,7 +1934,7 @@ $('sendRecalibrate').addEventListener('click', async () => {
       showToast(j?.error ? `Rekalibrierung fehlgeschlagen: ${j.error}` : `Fehler (HTTP ${res.status})`, 'error');
       return;
     }
-    showToast('Rekalibrierung gesendet ✓', 'success');
+    showToast('Rekalibrierung gesendet', 'success');
     refreshDetail();
   } catch (err) {
     showToast('Rekalibrierung konnte nicht gesendet werden', 'error');
@@ -2007,11 +2007,11 @@ function startSse() {
           showToast(`Uplink von ${msg.devEui?.slice(-8) || '?'}`, 'success');
         }
         if (msg.type === 'auto-recalibrate') {
-          showToast(`⚠ Auto-Rekalibrierung: ${msg.devEui?.slice(-8) || '?'} (Sprung ${Number(msg.jump || 0).toFixed(1)})`, 'error');
+          showToast(`Auto-Rekalibrierung: ${msg.devEui?.slice(-8) || '?'} (Sprung ${Number(msg.jump || 0).toFixed(1)})`, 'error');
           if (msg.devEui === currentDevEui && $('pageDetail').classList.contains('active')) refreshDetail();
         }
         if (msg.type === 'manual-recalibrate') {
-          showToast(`🔧 Manuelle Rekalibrierung gesendet: ${msg.devEui?.slice(-8) || '?'}`, 'info');
+          showToast(`Manuelle Rekalibrierung gesendet: ${msg.devEui?.slice(-8) || '?'}`, 'info');
         }
       } catch {}
     };
