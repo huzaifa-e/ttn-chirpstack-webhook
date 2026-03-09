@@ -371,13 +371,13 @@ function ChartWrapper({ label, children, controls, isZoomed, onReset, containerR
   return (
     <>
       <div
-        ref={containerRef}
+        ref={expanded ? undefined : containerRef}
         onDoubleClick={onDoubleClick}
         className={`rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-4 select-none transition-shadow ${isDragging ? "cursor-col-resize ring-2 ring-blue-400/30 shadow-lg shadow-blue-500/10" : "cursor-crosshair"}`}
       >
         {header}
-        {children}
-        {footer}
+        {!expanded && children}
+        {!expanded && footer}
       </div>
 
       {expanded && createPortal(
