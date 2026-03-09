@@ -944,6 +944,12 @@ export function listConfiguredDevices(): ConfiguredDevice[] {
   return rows.map(r => ({ ...r, device_type: normalizeDeviceType(r.device_type) }));
 }
 
+/** Resolve a UUID to a dev_eui. Returns null if not found. */
+export function getDevEuiByUuid(uuid: string): string | null {
+  const row = db.prepare(`SELECT dev_eui FROM devices WHERE uuid = ?`).get(uuid) as { dev_eui: string } | undefined;
+  return row?.dev_eui ?? null;
+}
+
 export function getConfiguredDevice(uuid: string): ConfiguredDevice | null {
   const row = db.prepare(`SELECT * FROM devices WHERE uuid = ?`).get(uuid) as ConfiguredDevice | undefined;
   if (!row) return null;

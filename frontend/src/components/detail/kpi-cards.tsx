@@ -126,7 +126,7 @@ export function KPICards({
         sub="Intervall überschritten"
         color={failureCount > 0 ? "#ef4444" : "#22c55e"}
         delay={0.3}
-        href={`/device/${encodeURIComponent(device.dev_eui)}/failures`}
+        href={`/device/${encodeURIComponent(device.uuid || device.dev_eui)}/failures`}
       />
     </div>
   )

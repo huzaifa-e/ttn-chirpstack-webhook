@@ -5,7 +5,7 @@ import { Send, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 import { sendIntervalDownlink, sendRecalibrateDownlink } from "@/lib/api"
 
-export function DownlinkPanel({ devEui }: { devEui: string }) {
+export function DownlinkPanel({ devEui, deviceUuid }: { devEui: string; deviceUuid?: string }) {
   const [intervalValue, setIntervalValue] = useState(15)
   const [intervalUnit, setIntervalUnit] = useState<"s" | "m" | "h">("m")
   const [fPort, setFPort] = useState(15)
@@ -22,7 +22,7 @@ export function DownlinkPanel({ devEui }: { devEui: string }) {
   const handleSendInterval = async () => {
     setSending(true)
     try {
-      await sendIntervalDownlink({ devEui, seconds: getSeconds(), fPort })
+      await sendIntervalDownlink({ uuid: deviceUuid, devEui, seconds: getSeconds(), fPort })
       toast.success("Intervall-Downlink gesendet", {
         description: `${intervalValue}${intervalUnit} auf fPort ${fPort}`,
       })
@@ -36,7 +36,7 @@ export function DownlinkPanel({ devEui }: { devEui: string }) {
   const handleRecalibrate = async () => {
     setSending(true)
     try {
-      await sendRecalibrateDownlink({ devEui, fPort })
+      await sendRecalibrateDownlink({ uuid: deviceUuid, devEui, fPort })
       toast.success("Rekalibrierung gesendet")
     } catch (err) {
       toast.error("Fehler beim Senden", { description: String(err) })

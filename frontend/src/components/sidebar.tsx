@@ -126,7 +126,7 @@ export function Sidebar() {
           <LastUplinkPayload uplink={deviceControls.lastUplink} />
 
           {/* Downlink Panel */}
-          <DownlinkPanel devEui={deviceControls.devEui} />
+          <DownlinkPanel devEui={deviceControls.devEui} deviceUuid={deviceControls.deviceUuid} />
         </div>
       )}
     </aside>

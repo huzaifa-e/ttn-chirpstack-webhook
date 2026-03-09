@@ -236,9 +236,7 @@ export default function Home() {
               onClose={() => setIsSearchOpen(false)}
               devices={devices}
               deviceTypes={deviceTypes}
-              onSelect={(devEui) => {
-                const dev = devices.find(d => d.dev_eui === devEui)
-                const id = dev?.uuid || devEui
+              onSelect={(id) => {
                 router.push(`/device/${encodeURIComponent(id)}`)
               }}
             />

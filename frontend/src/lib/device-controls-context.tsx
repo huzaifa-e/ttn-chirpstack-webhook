@@ -12,6 +12,7 @@ export interface DeviceControlsState {
   fetchData: () => void
   lastUplink: Uplink | null
   devEui: string
+  deviceUuid: string
 }
 
 interface ContextValue {

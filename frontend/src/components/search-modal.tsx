@@ -69,7 +69,7 @@ export const SearchModal: React.FC<{
               <button
                 key={d.dev_eui}
                 onClick={() => {
-                  onSelect(d.dev_eui)
+                  onSelect(d.uuid || d.dev_eui)
                   onClose()
                   setQuery("")
                 }}

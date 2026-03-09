@@ -24,7 +24,6 @@ import { PayloadExplorer } from "@/components/detail/payload-explorer"
 
 import {
   getDeviceSummaries,
-  getDeviceTypes,
   getReadings,
   getUplinks,
   getLastUplink,
@@ -42,16 +41,11 @@ import type { DeviceSummary, DeviceType, Reading, Uplink, DailyConsumption, Anom
 const CONSUMPTION_DAYS = 365
 const CONSUMPTION_HISTORY_DAYS = 1200
 
-// UUID format: 8-4-4-4-12 hex chars
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export default function DeviceDetailPage() {
   const params = useParams()
-  const routeParam = decodeURIComponent(params.devEui as string)
-  const isUUID = UUID_RE.test(routeParam)
+  const deviceUuid = decodeURIComponent(params.uuid as string)
 
-  const [devEui, setDevEui] = useState<string>(isUUID ? "" : routeParam)
-  const [deviceUuid, setDeviceUuid] = useState<string | null>(isUUID ? routeParam : null)
+  const [devEui, setDevEui] = useState<string>("")
   const [device, setDevice] = useState<DeviceSummary | null>(null)
   const [deviceType, setDeviceType] = useState<DeviceType>("unknown")
   const [readings, setReadings] = useState<Reading[]>([])
@@ -66,24 +60,21 @@ export default function DeviceDetailPage() {
   const [days, setDays] = useState(DEFAULT_DAYS)
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
 
-  // Resolve UUID to devEui on mount
+  // Resolve UUID to devEui on mount (for display / SSE matching)
   useEffect(() => {
-    if (isUUID) {
-      getConfiguredDevice(routeParam)
-        .then((cfg) => {
-          setDevEui(cfg.dev_eui)
-          setDeviceType(cfg.device_type)
-          setDeviceUuid(cfg.uuid)
-        })
-        .catch(() => {
-          toast.error("Gerät nicht gefunden")
-          setLoading(false)
-        })
-    }
-  }, [routeParam, isUUID])
+    getConfiguredDevice(deviceUuid)
+      .then((cfg) => {
+        setDevEui(cfg.dev_eui)
+        setDeviceType(cfg.device_type)
+      })
+      .catch(() => {
+        toast.error("Gerät nicht gefunden")
+        setLoading(false)
+      })
+  }, [deviceUuid])
 
   const fetchData = useCallback(async () => {
-    if (!devEui) return
+    if (!deviceUuid) return
     setRefreshing(true)
     try {
       const now = new Date()
@@ -91,21 +82,18 @@ export default function DeviceDetailPage() {
       const fromConsumption = new Date(now.getTime() - CONSUMPTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       const to = now.toISOString()
 
-      const [summaries, types, readingsData, consumptionReadingsData, uplinksData, lastUp, daily, anomalyData] = await Promise.all([
+      const [summaries, readingsData, consumptionReadingsData, uplinksData, lastUp, daily, anomalyData] = await Promise.all([
         getDeviceSummaries(),
-        getDeviceTypes(),
-        getReadings(devEui, from, to),
-        getReadings(devEui, fromConsumption, to),
-        getUplinks(devEui, from, to),
-        getLastUplink(devEui),
-        getDailyConsumption(devEui, CONSUMPTION_HISTORY_DAYS, timezone),
-        getAnomalies(devEui),
+        getReadings(deviceUuid, from, to),
+        getReadings(deviceUuid, fromConsumption, to),
+        getUplinks(deviceUuid, from, to),
+        getLastUplink(deviceUuid),
+        getDailyConsumption(deviceUuid, CONSUMPTION_HISTORY_DAYS, timezone),
+        getAnomalies(deviceUuid),
       ])
 
-      const dev = summaries.find((d) => d.dev_eui === devEui) || null
+      const dev = summaries.find((d) => d.dev_eui === devEui || d.uuid === deviceUuid) || null
       setDevice(dev)
-      // Use configured device type if accessed via UUID, else use device_settings type
-      if (!deviceUuid) setDeviceType(types[devEui] || "unknown")
       setReadings(readingsData)
       setConsumptionReadings(consumptionReadingsData)
       setUplinks(uplinksData)
@@ -119,7 +107,7 @@ export default function DeviceDetailPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [devEui, days, timezone, deviceUuid])
+  }, [deviceUuid, devEui, days, timezone])
 
   useEffect(() => {
     if (devEui) fetchData()
@@ -152,8 +140,8 @@ export default function DeviceDetailPage() {
 
   // Register controls into the shared sidebar context
   useSetDeviceControls(useMemo(() => ({
-    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui,
-  }), [days, timezone, refreshing, fetchData, lastUplink, devEui]))
+    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui, deviceUuid,
+  }), [days, timezone, refreshing, fetchData, lastUplink, devEui, deviceUuid]))
 
   if (loading) {
     return (
@@ -170,7 +158,7 @@ export default function DeviceDetailPage() {
     return (
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-zinc-500 mb-4">Gerät nicht gefunden: {devEui}</p>
+          <p className="text-zinc-500 mb-4">Gerät nicht gefunden: {deviceUuid}</p>
           <Link href="/" className="text-blue-500 hover:underline text-sm">← Zurück zur Übersicht</Link>
         </div>
       </div>
@@ -219,7 +207,7 @@ export default function DeviceDetailPage() {
 
         <div className="flex justify-end">
           <Link
-            href={`/device/${encodeURIComponent(routeParam)}/failures`}
+            href={`/device/${encodeURIComponent(deviceUuid)}/failures`}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-400 bg-red-50/60 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-sm font-medium transition-colors"
           >
             <AlertTriangle size={16} />
@@ -258,7 +246,7 @@ export default function DeviceDetailPage() {
         </div>
 
         {/* Data Management */}
-        <DataManagement devEui={devEui} onDataChanged={fetchData} />
+        <DataManagement devEui={deviceUuid} onDataChanged={fetchData} />
       </div>
     </div>
   )

@@ -13,6 +13,11 @@ import type {
 
 const BASE = "" // proxied via next.config.ts rewrites
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function isUUID(v: string): boolean {
+  return UUID_RE.test(v)
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${url}`, init)
   if (!res.ok) {
@@ -86,16 +91,20 @@ export async function deleteConfiguredDevice(uuid: string): Promise<void> {
 }
 
 // Readings & Uplinks
-export async function getReadings(devEui: string, from?: string, to?: string): Promise<Reading[]> {
-  const params = new URLSearchParams({ devEui })
+export async function getReadings(devEuiOrUuid: string, from?: string, to?: string): Promise<Reading[]> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   if (from) params.set("from", from)
   if (to) params.set("to", to)
   const data = await fetchJSON<{ readings: Reading[] }>(`/api/readings?${params}`)
   return data.readings
 }
 
-export async function getUplinks(devEui: string, from?: string, to?: string, limit?: number): Promise<Uplink[]> {
-  const params = new URLSearchParams({ devEui })
+export async function getUplinks(devEuiOrUuid: string, from?: string, to?: string, limit?: number): Promise<Uplink[]> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   if (from) params.set("from", from)
   if (to) params.set("to", to)
   if (limit) params.set("limit", String(limit))
@@ -103,19 +112,24 @@ export async function getUplinks(devEui: string, from?: string, to?: string, lim
   return data.uplinks
 }
 
-export async function getLastUplink(devEui: string): Promise<Uplink | null> {
-  const data = await fetchJSON<{ last: Uplink | null }>(`/api/last-uplink?devEui=${encodeURIComponent(devEui)}`)
+export async function getLastUplink(devEuiOrUuid: string): Promise<Uplink | null> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
+  const data = await fetchJSON<{ last: Uplink | null }>(`/api/last-uplink?${params}`)
   return data.last
 }
 
 // Consumption
 export async function getDailyConsumption(
-  devEui: string,
+  devEuiOrUuid: string,
   days?: number,
   tz?: string,
   end?: string,
 ): Promise<{ series: DailyConsumption[]; days: number; tz: string }> {
-  const params = new URLSearchParams({ devEui })
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   if (days) params.set("days", String(days))
   if (tz) params.set("tz", tz)
   if (end) params.set("end", end)
@@ -123,9 +137,12 @@ export async function getDailyConsumption(
 }
 
 // Anomalies
-export async function getAnomalies(devEui?: string, limit?: number): Promise<Anomaly[]> {
+export async function getAnomalies(devEuiOrUuid?: string, limit?: number): Promise<Anomaly[]> {
   const params = new URLSearchParams()
-  if (devEui) params.set("devEui", devEui)
+  if (devEuiOrUuid) {
+    if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+    else params.set("devEui", devEuiOrUuid)
+  }
   if (limit) params.set("limit", String(limit))
   const data = await fetchJSON<{ anomalies: Anomaly[] }>(`/api/anomalies?${params}`)
   return data.anomalies
@@ -149,33 +166,41 @@ export async function sendRecalibrateDownlink(req: DownlinkRecalibrateRequest): 
 }
 
 // Data Management
-export async function getTxCount(devEui: string, from: string, to: string): Promise<number> {
-  const params = new URLSearchParams({ devEui, from, to })
+export async function getTxCount(devEuiOrUuid: string, from: string, to: string): Promise<number> {
+  const params = new URLSearchParams({ from, to })
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   const data = await fetchJSON<{ count: number }>(`/api/tx-count?${params}`)
   return data.count
 }
 
 export async function deleteDataPoint(
-  devEui: string,
+  devEuiOrUuid: string,
   at: string,
   source: DeleteSource = "both",
 ): Promise<{ readingsDeleted: number; uplinksDeleted: number }> {
-  const params = new URLSearchParams({ devEui, at, source })
+  const params = new URLSearchParams({ at, source })
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   return fetchJSON(`/api/data-point?${params}`, { method: "DELETE" })
 }
 
 export async function deleteDataRange(
-  devEui: string,
+  devEuiOrUuid: string,
   from: string,
   to: string,
   source: DeleteSource = "both",
 ): Promise<{ readingsDeleted: number; uplinksDeleted: number }> {
-  const params = new URLSearchParams({ devEui, from, to, source })
+  const params = new URLSearchParams({ from, to, source })
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   return fetchJSON(`/api/data-range?${params}`, { method: "DELETE" })
 }
 
-export function getExportUrl(devEui: string, format: "json" | "csv", from?: string, to?: string): string {
-  const params = new URLSearchParams({ devEui, format })
+export function getExportUrl(devEuiOrUuid: string, format: "json" | "csv", from?: string, to?: string): string {
+  const params = new URLSearchParams({ format })
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
   if (from) params.set("from", from)
   if (to) params.set("to", to)
   return `/api/export?${params}`

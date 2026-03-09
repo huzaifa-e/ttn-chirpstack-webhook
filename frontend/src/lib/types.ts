@@ -89,7 +89,8 @@ export interface SSEEvent {
 }
 
 export interface DownlinkIntervalRequest {
-  devEui: string
+  devEui?: string
+  uuid?: string
   seconds: number
   fPort?: number
   applicationId?: string
@@ -97,7 +98,8 @@ export interface DownlinkIntervalRequest {
 }
 
 export interface DownlinkRecalibrateRequest {
-  devEui: string
+  devEui?: string
+  uuid?: string
   fPort?: number
   applicationId?: string
   deviceId?: string

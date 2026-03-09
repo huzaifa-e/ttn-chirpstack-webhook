@@ -28,6 +28,7 @@ import {
   listAnomalies,
   listConfiguredDevices,
   getConfiguredDevice,
+  getDevEuiByUuid,
   createConfiguredDevice,
   updateConfiguredDevice,
   deleteConfiguredDevice,
@@ -75,6 +76,22 @@ function normalizeDevEui(v: unknown): { hex?: string; base64?: string } {
     if (buf.length === 8) return { hex: buf.toString("hex"), base64: s };
   } catch {}
   return { hex: s.toLowerCase() };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a devEui from query params.
+ * Accepts either `uuid` or `devEui`; if `uuid` is given, looks up the dev_eui
+ * from the configured_devices table. Returns the devEui string or null.
+ */
+function resolveDevEui(query: Record<string, unknown>): string | null {
+  const uuid = query.uuid ? String(query.uuid).trim() : "";
+  if (uuid && UUID_RE.test(uuid)) {
+    return getDevEuiByUuid(uuid);
+  }
+  const raw = query.devEui ? String(query.devEui).trim().toLowerCase() : "";
+  return raw || null;
 }
 
 function numOrNull(v: unknown): number | null {
@@ -783,8 +800,8 @@ app.delete("/api/configured-devices/:uuid", (req, res) => {
 });
 
 app.get("/api/readings", (req, res) => {
-  const devEui = String(req.query.devEui || "");
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
 
   const from = req.query.from ? String(req.query.from) : undefined;
   const to = req.query.to ? String(req.query.to) : undefined;
@@ -792,8 +809,8 @@ app.get("/api/readings", (req, res) => {
 });
 
 app.get("/api/uplinks", (req, res) => {
-  const devEui = String(req.query.devEui || "");
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
 
   const from = req.query.from ? String(req.query.from) : undefined;
   const to = req.query.to ? String(req.query.to) : undefined;
@@ -809,8 +826,8 @@ app.get("/api/uplinks", (req, res) => {
 });
 
 app.get("/api/consumption/daily", (req, res) => {
-  const devEui = String(req.query.devEui || "");
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
 
   const days = req.query.days ? Number(req.query.days) : DEFAULT_DAYS;
   const tz = req.query.tz ? String(req.query.tz) : DEFAULT_TZ;
@@ -820,14 +837,14 @@ app.get("/api/consumption/daily", (req, res) => {
 });
 
 app.get("/api/last-reading", (req, res) => {
-  const devEui = String(req.query.devEui || "");
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
   res.json({ devEui, last: getLastReading(devEui) });
 });
 
 app.get("/api/last-uplink", (req, res) => {
-  const devEui = String(req.query.devEui || "");
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
   const last = getLastUplink(devEui);
   if (!last) return res.json({ devEui, last: null });
 
@@ -842,7 +859,7 @@ app.get("/api/last-uplink", (req, res) => {
 });
 
 app.get("/api/tx-count", (req, res) => {
-  const devEui = req.query.devEui ? String(req.query.devEui) : null;
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
   const from = String(req.query.from || "");
   const to = String(req.query.to || "");
   if (!from || !to) return res.status(400).json({ error: "from and to are required (ISO timestamps)" });
@@ -850,12 +867,14 @@ app.get("/api/tx-count", (req, res) => {
 });
 
 app.post("/api/downlink/upload-interval", async (req, res) => {
-  const devEui = String(req.body?.devEui || "").trim().toLowerCase();
+  const devEuiRaw = String(req.body?.devEui || "").trim().toLowerCase();
+  const uuidRaw = String(req.body?.uuid || "").trim();
+  const devEui = (uuidRaw && UUID_RE.test(uuidRaw)) ? (getDevEuiByUuid(uuidRaw) || "") : devEuiRaw;
   const seconds = Number(req.body?.seconds);
   const fPortRaw = req.body?.fPort ?? TTN_DEFAULT_F_PORT;
   const fPort = Number(fPortRaw);
 
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
   if (!Number.isFinite(seconds) || seconds < 1) {
     return res.status(400).json({ error: "seconds must be a positive number" });
   }
@@ -925,11 +944,13 @@ app.post("/api/downlink/upload-interval", async (req, res) => {
 
 // ---- manual recalibration downlink ----
 app.post("/api/downlink/recalibrate", async (req, res) => {
-  const devEui = String(req.body?.devEui || "").trim().toLowerCase();
+  const devEuiRaw = String(req.body?.devEui || "").trim().toLowerCase();
+  const uuidRaw = String(req.body?.uuid || "").trim();
+  const devEui = (uuidRaw && UUID_RE.test(uuidRaw)) ? (getDevEuiByUuid(uuidRaw) || "") : devEuiRaw;
   const fPortRaw = req.body?.fPort ?? TTN_DEFAULT_F_PORT;
   const fPort = Number(fPortRaw);
 
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
   if (!Number.isInteger(fPort) || fPort < 1 || fPort > 255) {
     return res.status(400).json({ error: "fPort must be an integer between 1 and 255" });
   }
@@ -991,7 +1012,7 @@ app.post("/api/downlink/recalibrate", async (req, res) => {
 
 // ---- anomaly log API ----
 app.get("/api/anomalies", (req, res) => {
-  const devEui = req.query.devEui ? String(req.query.devEui).trim().toLowerCase() : null;
+  const devEui = resolveDevEui(req.query as Record<string, unknown>);
   const limit = req.query.limit ? Math.max(1, Number(req.query.limit)) : 200;
   const entries = listAnomalies(devEui, limit);
   return res.json({ devEui, anomalies: entries });
@@ -1006,14 +1027,14 @@ app.delete("/api/devices/:devEui", (req, res) => {
 });
 
 app.delete("/api/data-point", (req, res) => {
-  const devEui = String(req.query.devEui || "").trim().toLowerCase();
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
   const at = String(req.query.at || "").trim();
   const sourceRaw = String(req.query.source || "both").toLowerCase();
   const source = (sourceRaw === "readings" || sourceRaw === "uplinks" || sourceRaw === "both")
     ? sourceRaw
     : "both";
 
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
   if (!at) return res.status(400).json({ error: "at is required (ISO timestamp)" });
 
   const deleted = deleteDataPoint(devEui, at, source);
@@ -1021,7 +1042,7 @@ app.delete("/api/data-point", (req, res) => {
 });
 
 app.delete("/api/data-range", (req, res) => {
-  const devEui = String(req.query.devEui || "").trim().toLowerCase();
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
   const from = String(req.query.from || "").trim();
   const to = String(req.query.to || "").trim();
   const sourceRaw = String(req.query.source || "both").toLowerCase();
@@ -1029,7 +1050,7 @@ app.delete("/api/data-range", (req, res) => {
     ? sourceRaw
     : "both";
 
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
   if (!from || !to) return res.status(400).json({ error: "from and to are required (ISO timestamps)" });
   if (from > to) return res.status(400).json({ error: "from must be <= to" });
 
@@ -1038,9 +1059,9 @@ app.delete("/api/data-range", (req, res) => {
 });
 
 app.get("/api/export", (req, res) => {
-  const devEui = String(req.query.devEui || "").trim().toLowerCase();
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
   const format = String(req.query.format || "json").toLowerCase();
-  if (!devEui) return res.status(400).json({ error: "devEui is required" });
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
 
   const from = req.query.from ? String(req.query.from) : undefined;
   const to = req.query.to ? String(req.query.to) : undefined;

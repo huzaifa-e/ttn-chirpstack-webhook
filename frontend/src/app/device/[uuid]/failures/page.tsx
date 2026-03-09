@@ -125,26 +125,21 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
   )
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export default function DeviceFailuresPage() {
   const params = useParams()
-  const routeParam = decodeURIComponent(params.devEui as string)
-  const isUUID = UUID_RE.test(routeParam)
+  const deviceUuid = decodeURIComponent(params.uuid as string)
 
-  const [devEui, setDevEui] = useState(isUUID ? "" : routeParam)
+  const [devEui, setDevEui] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expectedIntervalSec, setExpectedIntervalSec] = useState<number>(120)
   const [logs, setLogs] = useState<UploadFailureLog[]>([])
 
   useEffect(() => {
-    if (isUUID) {
-      getConfiguredDevice(routeParam)
-        .then((cfg) => setDevEui(cfg.dev_eui))
-        .catch(() => setError("Gerät nicht gefunden"))
-    }
-  }, [routeParam, isUUID])
+    getConfiguredDevice(deviceUuid)
+      .then((cfg) => setDevEui(cfg.dev_eui))
+      .catch(() => setError("Gerät nicht gefunden"))
+  }, [deviceUuid])
 
   useEffect(() => {
     if (!devEui) return
@@ -160,7 +155,7 @@ export default function DeviceFailuresPage() {
 
         const [summaries, uplinks] = await Promise.all([
           getDeviceSummaries(),
-          getUplinks(devEui, from, to, 5000),
+          getUplinks(deviceUuid, from, to, 5000),
         ])
 
         if (cancelled) return
@@ -192,7 +187,7 @@ export default function DeviceFailuresPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link
-              href={`/device/${encodeURIComponent(routeParam)}`}
+              href={`/device/${encodeURIComponent(deviceUuid)}`}
               className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
             >
               <ArrowLeft size={16} className="text-zinc-500" />
