@@ -1,7 +1,9 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea, ReferenceLine } from "recharts"
+import { Maximize2, X } from "lucide-react"
 import type { DailyConsumption } from "@/lib/types"
 import { formatChartNumber } from "@/lib/formatters"
 import { useChartZoom } from "./use-chart-zoom"
@@ -301,36 +303,107 @@ interface ChartWrapperProps {
 }
 
 function ChartWrapper({ label, children, controls, isZoomed, onReset, containerRef, isDragging, onDoubleClick }: ChartWrapperProps) {
-  return (
-    <div
-      ref={containerRef}
-      onDoubleClick={onDoubleClick}
-      className={`rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-4 select-none transition-shadow ${isDragging ? "cursor-col-resize ring-2 ring-blue-400/30 shadow-lg shadow-blue-500/10" : "cursor-crosshair"}`}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{label}</h3>
-        <div className="flex items-center gap-2">
-          {controls}
-          {isDragging && (
-            <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 animate-pulse">
-              Bereich auswählen…
-            </span>
-          )}
-          {isZoomed && onReset && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onReset(); }}
-              className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
-            >
-              ↩ Zoom zurücksetzen
-            </button>
-          )}
-        </div>
+  const [expanded, setExpanded] = useState(false)
+
+  const closeExpanded = useCallback(() => setExpanded(false), [])
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!expanded) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeExpanded()
+    }
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
+  }, [expanded, closeExpanded])
+
+  // Lock body scroll when expanded
+  useEffect(() => {
+    if (expanded) {
+      document.body.style.overflow = "hidden"
+      return () => { document.body.style.overflow = "" }
+    }
+  }, [expanded])
+
+  const header = (
+    <div className="flex items-center justify-between mb-3">
+      <h3 className={`font-semibold text-zinc-700 dark:text-zinc-300 ${expanded ? "text-base" : "text-sm"}`}>{label}</h3>
+      <div className="flex items-center gap-2">
+        {controls}
+        {isDragging && (
+          <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 animate-pulse">
+            Bereich auswählen…
+          </span>
+        )}
+        {isZoomed && onReset && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onReset(); }}
+            className="text-[10px] px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+          >
+            ↩ Zoom zurücksetzen
+          </button>
+        )}
+        {expanded ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); closeExpanded(); }}
+            className="p-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+            title="Schließen"
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); setExpanded(true); }}
+            className="p-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+            title="Vergrößern"
+          >
+            <Maximize2 size={14} />
+          </button>
+        )}
       </div>
-      {children}
-      {isZoomed && (
-        <p className="text-[10px] text-zinc-400 mt-2 text-center">Doppelklick zum Zurücksetzen · Scrollen zum Zoomen · Ziehen zum Auswählen</p>
-      )}
     </div>
+  )
+
+  const footer = isZoomed ? (
+    <p className="text-[10px] text-zinc-400 mt-2 text-center">Doppelklick zum Zurücksetzen · Scrollen zum Zoomen · Ziehen zum Auswählen</p>
+  ) : null
+
+  return (
+    <>
+      <div
+        ref={containerRef}
+        onDoubleClick={onDoubleClick}
+        className={`rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-4 select-none transition-shadow ${isDragging ? "cursor-col-resize ring-2 ring-blue-400/30 shadow-lg shadow-blue-500/10" : "cursor-crosshair"}`}
+      >
+        {header}
+        {children}
+        {footer}
+      </div>
+
+      {expanded && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-6 sm:p-10"
+          onClick={closeExpanded}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          {/* Modal */}
+          <div
+            ref={containerRef}
+            onDoubleClick={onDoubleClick}
+            onClick={(e) => e.stopPropagation()}
+            className={`relative w-full max-w-[90vw] max-h-[90vh] rounded-2xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white dark:bg-zinc-950 p-6 shadow-2xl select-none overflow-auto ${isDragging ? "cursor-col-resize" : "cursor-crosshair"}`}
+          >
+            {header}
+            <div className="[&_.recharts-responsive-container]:!h-[65vh]">
+              {children}
+            </div>
+            {footer}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
 
