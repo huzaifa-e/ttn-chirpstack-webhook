@@ -26,6 +26,11 @@ import {
   setLastAutoRecalibratedAt,
   storeAnomaly,
   listAnomalies,
+  listConfiguredDevices,
+  getConfiguredDevice,
+  createConfiguredDevice,
+  updateConfiguredDevice,
+  deleteConfiguredDevice,
 } from "./db.js";
 
 dotenv.config();
@@ -714,7 +719,16 @@ app.get("/debug/last", (_req, res) => res.json({ lastEvents }));
 // REST API
 app.get("/api/devices", (_req, res) => res.json({ devices: listDevices() }));
 
-app.get("/api/device-summaries", (_req, res) => res.json({ devices: getDeviceSummaries() }));
+app.get("/api/device-summaries", (_req, res) => {
+  const summaries = getDeviceSummaries();
+  const configured = listConfiguredDevices();
+  // Merge UUID into summaries
+  const enriched = summaries.map(s => {
+    const cfg = configured.find(c => c.dev_eui === s.dev_eui);
+    return { ...s, uuid: cfg?.uuid ?? null };
+  });
+  res.json({ devices: enriched });
+});
 
 app.get("/api/device-types", (_req, res) => {
   res.json({ deviceTypes: listDeviceTypes() });
@@ -728,6 +742,44 @@ app.put("/api/device-types/:devEui", (req, res) => {
   const deviceType = normalizeDeviceType(rawType);
   setDeviceType(devEui, deviceType);
   return res.json({ devEui, deviceType });
+});
+
+// --- Configured Devices (UUID-based) ---
+
+app.get("/api/configured-devices", (_req, res) => {
+  res.json({ devices: listConfiguredDevices() });
+});
+
+app.get("/api/configured-devices/:uuid", (req, res) => {
+  const device = getConfiguredDevice(req.params.uuid);
+  if (!device) return res.status(404).json({ error: "Device not found" });
+  return res.json({ device });
+});
+
+app.post("/api/configured-devices", (req, res) => {
+  const { dev_eui, name, device_type } = req.body || {};
+  if (!dev_eui) return res.status(400).json({ error: "dev_eui is required" });
+  if (!name) return res.status(400).json({ error: "name is required" });
+
+  const device = createConfiguredDevice({
+    dev_eui: String(dev_eui),
+    name: String(name),
+    device_type: String(device_type || "unknown"),
+  });
+  return res.status(201).json({ device });
+});
+
+app.put("/api/configured-devices/:uuid", (req, res) => {
+  const { name, device_type } = req.body || {};
+  const device = updateConfiguredDevice(req.params.uuid, { name, device_type });
+  if (!device) return res.status(404).json({ error: "Device not found" });
+  return res.json({ device });
+});
+
+app.delete("/api/configured-devices/:uuid", (req, res) => {
+  const deleted = deleteConfiguredDevice(req.params.uuid);
+  if (!deleted) return res.status(404).json({ error: "Device not found" });
+  return res.json({ ok: true });
 });
 
 app.get("/api/readings", (req, res) => {

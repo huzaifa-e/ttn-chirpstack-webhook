@@ -6,7 +6,7 @@ import { useParams } from "next/navigation"
 import { ArrowLeft, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react"
 
 import { BackgroundPlus } from "@/demos/background-plus"
-import { getDeviceSummaries, getUplinks } from "@/lib/api"
+import { getDeviceSummaries, getUplinks, getConfiguredDevice } from "@/lib/api"
 import { analyzeUplinkFailures, type UploadFailureLog } from "@/lib/failure-analysis"
 import { DEFAULT_DAYS } from "@/lib/constants"
 
@@ -125,16 +125,29 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
   )
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default function DeviceFailuresPage() {
   const params = useParams()
-  const devEui = decodeURIComponent(params.devEui as string)
+  const routeParam = decodeURIComponent(params.devEui as string)
+  const isUUID = UUID_RE.test(routeParam)
 
+  const [devEui, setDevEui] = useState(isUUID ? "" : routeParam)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expectedIntervalSec, setExpectedIntervalSec] = useState<number>(120)
   const [logs, setLogs] = useState<UploadFailureLog[]>([])
 
   useEffect(() => {
+    if (isUUID) {
+      getConfiguredDevice(routeParam)
+        .then((cfg) => setDevEui(cfg.dev_eui))
+        .catch(() => setError("Gerät nicht gefunden"))
+    }
+  }, [routeParam, isUUID])
+
+  useEffect(() => {
+    if (!devEui) return
     let cancelled = false
 
     const run = async () => {
@@ -179,7 +192,7 @@ export default function DeviceFailuresPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link
-              href={`/device/${encodeURIComponent(devEui)}`}
+              href={`/device/${encodeURIComponent(routeParam)}`}
               className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
             >
               <ArrowLeft size={16} className="text-zinc-500" />

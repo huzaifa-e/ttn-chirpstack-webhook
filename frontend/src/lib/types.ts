@@ -14,6 +14,15 @@ export interface DeviceSummary {
   first_seen: string | null
   meter_value: number | null
   meter_value_raw: string | null
+  uuid: string | null
+}
+
+export interface ConfiguredDevice {
+  uuid: string
+  dev_eui: string
+  name: string
+  device_type: DeviceType
+  created_at: string
 }
 
 export interface Reading {

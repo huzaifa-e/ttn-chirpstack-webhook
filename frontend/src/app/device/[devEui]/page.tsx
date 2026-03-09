@@ -30,6 +30,7 @@ import {
   getLastUplink,
   getDailyConsumption,
   getAnomalies,
+  getConfiguredDevice,
 } from "@/lib/api"
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
@@ -41,10 +42,16 @@ import type { DeviceSummary, DeviceType, Reading, Uplink, DailyConsumption, Anom
 const CONSUMPTION_DAYS = 365
 const CONSUMPTION_HISTORY_DAYS = 1200
 
+// UUID format: 8-4-4-4-12 hex chars
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default function DeviceDetailPage() {
   const params = useParams()
-  const devEui = decodeURIComponent(params.devEui as string)
+  const routeParam = decodeURIComponent(params.devEui as string)
+  const isUUID = UUID_RE.test(routeParam)
 
+  const [devEui, setDevEui] = useState<string>(isUUID ? "" : routeParam)
+  const [deviceUuid, setDeviceUuid] = useState<string | null>(isUUID ? routeParam : null)
   const [device, setDevice] = useState<DeviceSummary | null>(null)
   const [deviceType, setDeviceType] = useState<DeviceType>("unknown")
   const [readings, setReadings] = useState<Reading[]>([])
@@ -59,7 +66,24 @@ export default function DeviceDetailPage() {
   const [days, setDays] = useState(DEFAULT_DAYS)
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
 
+  // Resolve UUID to devEui on mount
+  useEffect(() => {
+    if (isUUID) {
+      getConfiguredDevice(routeParam)
+        .then((cfg) => {
+          setDevEui(cfg.dev_eui)
+          setDeviceType(cfg.device_type)
+          setDeviceUuid(cfg.uuid)
+        })
+        .catch(() => {
+          toast.error("Gerät nicht gefunden")
+          setLoading(false)
+        })
+    }
+  }, [routeParam, isUUID])
+
   const fetchData = useCallback(async () => {
+    if (!devEui) return
     setRefreshing(true)
     try {
       const now = new Date()
@@ -80,7 +104,8 @@ export default function DeviceDetailPage() {
 
       const dev = summaries.find((d) => d.dev_eui === devEui) || null
       setDevice(dev)
-      setDeviceType(types[devEui] || "unknown")
+      // Use configured device type if accessed via UUID, else use device_settings type
+      if (!deviceUuid) setDeviceType(types[devEui] || "unknown")
       setReadings(readingsData)
       setConsumptionReadings(consumptionReadingsData)
       setUplinks(uplinksData)
@@ -94,11 +119,11 @@ export default function DeviceDetailPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [devEui, days, timezone])
+  }, [devEui, days, timezone, deviceUuid])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    if (devEui) fetchData()
+  }, [devEui, fetchData])
 
   // SSE live updates for this device
   const handleSSE = useCallback(
@@ -194,7 +219,7 @@ export default function DeviceDetailPage() {
 
         <div className="flex justify-end">
           <Link
-            href={`/device/${encodeURIComponent(devEui)}/failures`}
+            href={`/device/${encodeURIComponent(routeParam)}/failures`}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-400 bg-red-50/60 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-sm font-medium transition-colors"
           >
             <AlertTriangle size={16} />

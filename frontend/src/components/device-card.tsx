@@ -103,7 +103,7 @@ export const DeviceCard: React.FC<{
       onMouseLeave={() => setIsActive(false)}
       className="relative group"
     >
-      <Link href={`/device/${encodeURIComponent(device.dev_eui)}`}>
+      <Link href={device.uuid ? `/device/${encodeURIComponent(device.uuid)}` : `/device/${encodeURIComponent(device.dev_eui)}`}>
         <ProfessionalCard isActive={isActive} accentColor={config.color}>
           {/* Header */}
           <div className="flex items-center justify-between mb-4">

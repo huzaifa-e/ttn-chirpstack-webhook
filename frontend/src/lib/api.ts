@@ -1,6 +1,7 @@
 import type {
   DeviceSummary,
   DeviceType,
+  ConfiguredDevice,
   Reading,
   Uplink,
   DailyConsumption,
@@ -42,6 +43,46 @@ export async function setDeviceType(devEui: string, deviceType: DeviceType): Pro
 
 export async function deleteDevice(devEui: string): Promise<{ readingsDeleted: number; uplinksDeleted: number }> {
   return fetchJSON(`/api/devices/${encodeURIComponent(devEui)}`, { method: "DELETE" })
+}
+
+// Configured Devices (UUID-based)
+export async function getConfiguredDevices(): Promise<ConfiguredDevice[]> {
+  const data = await fetchJSON<{ devices: ConfiguredDevice[] }>("/api/configured-devices")
+  return data.devices
+}
+
+export async function getConfiguredDevice(uuid: string): Promise<ConfiguredDevice> {
+  const data = await fetchJSON<{ device: ConfiguredDevice }>(`/api/configured-devices/${encodeURIComponent(uuid)}`)
+  return data.device
+}
+
+export async function createConfiguredDevice(input: {
+  dev_eui: string
+  name: string
+  device_type: string
+}): Promise<ConfiguredDevice> {
+  const data = await fetchJSON<{ device: ConfiguredDevice }>("/api/configured-devices", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  return data.device
+}
+
+export async function updateConfiguredDevice(
+  uuid: string,
+  input: { name?: string; device_type?: string },
+): Promise<ConfiguredDevice> {
+  const data = await fetchJSON<{ device: ConfiguredDevice }>(`/api/configured-devices/${encodeURIComponent(uuid)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  })
+  return data.device
+}
+
+export async function deleteConfiguredDevice(uuid: string): Promise<void> {
+  await fetchJSON(`/api/configured-devices/${encodeURIComponent(uuid)}`, { method: "DELETE" })
 }
 
 // Readings & Uplinks

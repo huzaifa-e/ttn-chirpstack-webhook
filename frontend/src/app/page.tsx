@@ -9,9 +9,10 @@ import { EmoniLogo } from "@/components/emoni-logo"
 import { DeviceCard } from "@/components/device-card"
 import { OverviewStats } from "@/components/overview-stats"
 import { SearchModal } from "@/components/search-modal"
+import { AddDeviceModal } from "@/components/add-device-modal"
 import { LiveIndicator } from "@/components/live-indicator"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { getDeviceSummaries, getDeviceTypes, getReadings } from "@/lib/api"
+import { getDeviceSummaries, getDeviceTypes, getReadings, createConfiguredDevice } from "@/lib/api"
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
 import type { DeviceSummary, DeviceType, DeviceStatus, SSEEvent } from "@/lib/types"
@@ -23,6 +24,7 @@ export default function Home() {
   const [sparklines, setSparklines] = useState<Record<string, number[]>>({})
   const [loading, setLoading] = useState(true)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
   const [filterType, setFilterType] = useState<DeviceType | "all">("all")
 
   const fetchData = useCallback(async () => {
@@ -178,6 +180,16 @@ export default function Home() {
                 <option value="unknown">Ohne Typ</option>
               </select>
 
+              {/* Add Device button */}
+              <motion.button
+                onClick={() => setIsAddDeviceOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all text-xs"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <span>+ Gerät</span>
+              </motion.button>
+
               {/* Search button */}
               <motion.button
                 onClick={() => setIsSearchOpen(true)}
@@ -224,7 +236,28 @@ export default function Home() {
               onClose={() => setIsSearchOpen(false)}
               devices={devices}
               deviceTypes={deviceTypes}
-              onSelect={(devEui) => router.push(`/device/${encodeURIComponent(devEui)}`)}
+              onSelect={(devEui) => {
+                const dev = devices.find(d => d.dev_eui === devEui)
+                const id = dev?.uuid || devEui
+                router.push(`/device/${encodeURIComponent(id)}`)
+              }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Add Device Modal */}
+        <AnimatePresence>
+          {isAddDeviceOpen && (
+            <AddDeviceModal
+              isOpen={isAddDeviceOpen}
+              onClose={() => setIsAddDeviceOpen(false)}
+              onSubmit={async (data) => {
+                const device = await createConfiguredDevice(data)
+                toast.success(`Gerät "${device.name}" erstellt`, {
+                  description: `UUID: ${device.uuid}`,
+                })
+                fetchData()
+              }}
             />
           )}
         </AnimatePresence>

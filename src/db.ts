@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data.db");
 const db = new Database(DB_PATH);
@@ -104,6 +105,58 @@ db.exec(`
   );
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_anomaly_dev_at ON anomaly_log(dev_eui, at);`);
+
+// --- devices table (logical device configurations with UUID) ---
+db.exec(`
+  CREATE TABLE IF NOT EXISTS devices (
+    uuid TEXT PRIMARY KEY,
+    dev_eui TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    device_type TEXT NOT NULL DEFAULT 'unknown',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_devices_dev_eui ON devices(dev_eui);`);
+
+// Auto-assign UUIDs to existing devices that don't have an entry yet
+function migrateExistingDevicesToUUID(): void {
+  const existingDevEuis = db.prepare(`
+    SELECT DISTINCT dev_eui FROM (
+      SELECT dev_eui FROM readings
+      UNION
+      SELECT dev_eui FROM uplinks
+    )
+  `).all() as Array<{ dev_eui: string }>;
+
+  const hasEntry = db.prepare(`SELECT 1 FROM devices WHERE dev_eui = ?`);
+  const insertDevice = db.prepare(`
+    INSERT INTO devices (uuid, dev_eui, name, device_type, created_at)
+    VALUES (@uuid, @dev_eui, @name, @device_type, @created_at)
+  `);
+
+  for (const row of existingDevEuis) {
+    if (hasEntry.get(row.dev_eui)) continue;
+    // Get device name from readings/uplinks
+    const nameRow = db.prepare(`
+      SELECT device_name FROM (
+        SELECT device_name FROM readings WHERE dev_eui = ? AND device_name IS NOT NULL
+        UNION ALL
+        SELECT device_name FROM uplinks WHERE dev_eui = ? AND device_name IS NOT NULL
+      ) LIMIT 1
+    `).get(row.dev_eui, row.dev_eui) as { device_name: string } | undefined;
+    // Get device type from device_settings
+    const typeRow = db.prepare(`SELECT device_type FROM device_settings WHERE dev_eui = ?`).get(row.dev_eui) as { device_type: string } | undefined;
+
+    insertDevice.run({
+      uuid: randomUUID(),
+      dev_eui: row.dev_eui,
+      name: nameRow?.device_name ?? "",
+      device_type: typeRow?.device_type ?? "unknown",
+      created_at: new Date().toISOString(),
+    });
+  }
+}
+migrateExistingDevicesToUUID();
 
 const stmtInsertAnomaly = db.prepare(`
   INSERT INTO anomaly_log (dev_eui, at, event_type, meter_value, previous_value, jump, threshold, action, details, created_at)
@@ -874,4 +927,70 @@ export function dailyConsumption(devEui: string, days: number, tz: string, endIs
     });
   }
   return out;
+}
+
+// --- Configured Devices (UUID-based) ---
+
+export interface ConfiguredDevice {
+  uuid: string;
+  dev_eui: string;
+  name: string;
+  device_type: DeviceType;
+  created_at: string;
+}
+
+export function listConfiguredDevices(): ConfiguredDevice[] {
+  const rows = db.prepare(`SELECT * FROM devices ORDER BY created_at DESC`).all() as ConfiguredDevice[];
+  return rows.map(r => ({ ...r, device_type: normalizeDeviceType(r.device_type) }));
+}
+
+export function getConfiguredDevice(uuid: string): ConfiguredDevice | null {
+  const row = db.prepare(`SELECT * FROM devices WHERE uuid = ?`).get(uuid) as ConfiguredDevice | undefined;
+  if (!row) return null;
+  return { ...row, device_type: normalizeDeviceType(row.device_type) };
+}
+
+export function createConfiguredDevice(input: { dev_eui: string; name: string; device_type: string }): ConfiguredDevice {
+  const uuid = randomUUID();
+  const devEui = String(input.dev_eui || "").trim().toLowerCase();
+  const deviceType = normalizeDeviceType(input.device_type);
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO devices (uuid, dev_eui, name, device_type, created_at)
+    VALUES (@uuid, @dev_eui, @name, @device_type, @created_at)
+  `).run({
+    uuid,
+    dev_eui: devEui,
+    name: String(input.name || "").trim(),
+    device_type: deviceType,
+    created_at: now,
+  });
+
+  // Also sync to device_settings
+  setDeviceType(devEui, deviceType);
+
+  return { uuid, dev_eui: devEui, name: String(input.name || "").trim(), device_type: deviceType, created_at: now };
+}
+
+export function updateConfiguredDevice(uuid: string, input: { name?: string; device_type?: string }): ConfiguredDevice | null {
+  const existing = getConfiguredDevice(uuid);
+  if (!existing) return null;
+
+  const name = input.name !== undefined ? String(input.name).trim() : existing.name;
+  const deviceType = input.device_type !== undefined ? normalizeDeviceType(input.device_type) : existing.device_type;
+
+  db.prepare(`
+    UPDATE devices SET name = @name, device_type = @device_type WHERE uuid = @uuid
+  `).run({ uuid, name, device_type: deviceType });
+
+  // Sync to device_settings
+  setDeviceType(existing.dev_eui, deviceType);
+
+  return { ...existing, name, device_type: deviceType };
+}
+
+export function deleteConfiguredDevice(uuid: string): boolean {
+  const info = db.prepare(`DELETE FROM devices WHERE uuid = ?`).run(uuid);
+  return Number(info.changes) > 0;
 }
