@@ -2,16 +2,18 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   SlidersHorizontal,
   RefreshCw,
+  Trash2,
 } from "lucide-react"
 import { EmoniLogo } from "./emoni-logo"
 import { useDeviceControls } from "@/lib/device-controls-context"
 import { LastUplinkPayload } from "@/components/detail/last-uplink-payload"
 import { DownlinkPanel } from "@/components/detail/downlink-panel"
+import { deleteConfiguredDevice, deleteDevice } from "@/lib/api"
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -19,10 +21,30 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const [hovered, setHovered] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const collapsed = !hovered
   const deviceControls = useDeviceControls()
   const isDevicePage = pathname.startsWith("/device/")
+
+  async function handleDeleteDevice() {
+    if (!deviceControls) return
+    setDeleting(true)
+    try {
+      // Delete configured device entry and its data
+      await deleteConfiguredDevice(deviceControls.deviceUuid)
+      await deleteDevice(deviceControls.devEui)
+      router.push("/")
+    } catch (err) {
+      console.error("Failed to delete device:", err)
+      alert("Fehler beim Löschen des Geräts")
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
 
   const expandedWidth = isDevicePage && deviceControls ? 320 : 220
 
@@ -127,6 +149,42 @@ export function Sidebar() {
 
           {/* Downlink Panel */}
           <DownlinkPanel devEui={deviceControls.devEui} deviceUuid={deviceControls.deviceUuid} />
+
+          {/* Delete Device */}
+          <div className="rounded-xl border border-red-200/50 dark:border-red-900/50 bg-white/80 dark:bg-zinc-950/80 p-3 space-y-2">
+            <h3 className="text-xs font-semibold text-red-500 dark:text-red-400 uppercase tracking-wider">Gefahrenzone</h3>
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-red-200 dark:border-red-800 bg-white dark:bg-zinc-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+              >
+                <Trash2 size={12} />
+                Gerät löschen
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[10px] text-red-600 dark:text-red-400">
+                  Gerät und alle Daten unwiderruflich löschen?
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDeleteDevice}
+                    disabled={deleting}
+                    className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? "Lösche…" : "Ja, löschen"}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={deleting}
+                    className="flex-1 px-2 py-1.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </aside>
