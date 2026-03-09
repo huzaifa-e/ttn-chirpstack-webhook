@@ -739,11 +739,35 @@ app.get("/api/devices", (_req, res) => res.json({ devices: listDevices() }));
 app.get("/api/device-summaries", (_req, res) => {
   const summaries = getDeviceSummaries();
   const configured = listConfiguredDevices();
-  // Merge UUID into summaries
+
+  // Merge UUID into existing summaries
+  const seenDevEuis = new Set<string>();
   const enriched = summaries.map(s => {
+    seenDevEuis.add(s.dev_eui);
     const cfg = configured.find(c => c.dev_eui === s.dev_eui);
     return { ...s, uuid: cfg?.uuid ?? null };
   });
+
+  // Add configured devices that have no data yet (not in readings/uplinks)
+  for (const cfg of configured) {
+    if (!seenDevEuis.has(cfg.dev_eui)) {
+      enriched.push({
+        dev_eui: cfg.dev_eui,
+        device_name: cfg.name || null,
+        last_seen: null,
+        battery_mv: null,
+        rssi: null,
+        snr: null,
+        total_uplinks: 0,
+        avg_interval_seconds: null,
+        first_seen: null,
+        meter_value: null,
+        meter_value_raw: null,
+        uuid: cfg.uuid,
+      });
+    }
+  }
+
   res.json({ devices: enriched });
 });
 
