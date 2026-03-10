@@ -3,6 +3,16 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import type { Uplink } from "./types"
 
+export type DetailSectionId =
+  | "sectionCharts"
+  | "sectionPayload"
+  | "sectionDownlink"
+  | "sectionRecalibrate"
+  | "sectionDataMgmt"
+  | "sectionExport"
+  | "sectionAddDevice"
+  | "sectionDeleteDevice"
+
 export interface DeviceControlsState {
   days: number
   setDays: (d: number) => void
@@ -13,6 +23,8 @@ export interface DeviceControlsState {
   lastUplink: Uplink | null
   devEui: string
   deviceUuid: string
+  activeSection: DetailSectionId
+  setActiveSection: (section: DetailSectionId) => void
 }
 
 interface ContextValue {

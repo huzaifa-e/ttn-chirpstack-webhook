@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Trash2, Download, Hash } from "lucide-react"
+import { Trash2, Hash } from "lucide-react"
 import { toast } from "sonner"
-import { getTxCount, deleteDataPoint, deleteDataRange, getExportUrl } from "@/lib/api"
+import { getTxCount, deleteDataPoint, deleteDataRange } from "@/lib/api"
 import type { DeleteSource } from "@/lib/types"
 
 export function DataManagement({ devEui, onDataChanged }: { devEui: string; onDataChanged?: () => void }) {
@@ -50,12 +50,6 @@ export function DataManagement({ devEui, onDataChanged }: { devEui: string; onDa
     } catch (err) {
       toast.error("Fehler", { description: String(err) })
     }
-  }
-
-  const handleExport = (format: "json" | "csv") => {
-    const fromISO = from ? new Date(from).toISOString() : undefined
-    const toISO = to ? new Date(to).toISOString() : undefined
-    window.open(getExportUrl(devEui, format, fromISO, toISO), "_blank")
   }
 
   return (
@@ -130,18 +124,6 @@ export function DataManagement({ devEui, onDataChanged }: { devEui: string; onDa
         <button onClick={handleDeleteSingle} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
           <Trash2 size={12} />
           Löschen
-        </button>
-      </div>
-
-      {/* Export */}
-      <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-700/50 flex gap-2">
-        <button onClick={() => handleExport("json")} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-          <Download size={12} />
-          JSON
-        </button>
-        <button onClick={() => handleExport("csv")} className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-          <Download size={12} />
-          CSV
         </button>
       </div>
     </div>

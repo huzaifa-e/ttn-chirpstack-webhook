@@ -12,6 +12,7 @@ import { DeviceIcon } from "@/components/device-icon"
 import { StatusBadge } from "@/components/status-badge"
 import { LiveIndicator } from "@/components/live-indicator"
 import { KPICards } from "@/components/detail/kpi-cards"
+import { ControlsPanel } from "@/components/detail/controls-panel"
 import { DataManagement } from "@/components/detail/data-management"
 import { DailyConsumptionChart, MeterBatteryChart } from "@/components/detail/daily-consumption-chart"
 import { HourlyConsumptionChart } from "@/components/detail/hourly-consumption-chart"
@@ -21,6 +22,12 @@ import { IMUChart } from "@/components/detail/imu-chart"
 import { SMLPowerChart } from "@/components/detail/sml-power-chart"
 import { AnomalyChart } from "@/components/detail/anomaly-chart"
 import { PayloadExplorer } from "@/components/detail/payload-explorer"
+import { LastUplinkPayload } from "@/components/detail/last-uplink-payload"
+import { IntervalDownlinkPanel } from "@/components/detail/interval-downlink-panel"
+import { RecalibratePanel } from "@/components/detail/recalibrate-panel"
+import { ExportPanel } from "@/components/detail/export-panel"
+import { DeleteDevicePanel } from "@/components/detail/delete-device-panel"
+import { AddDeviceForm } from "@/components/add-device-form"
 
 import {
   getDeviceSummaries,
@@ -30,6 +37,7 @@ import {
   getDailyConsumption,
   getAnomalies,
   getConfiguredDevice,
+  createConfiguredDevice,
 } from "@/lib/api"
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
@@ -59,6 +67,7 @@ export default function DeviceDetailPage() {
 
   const [days, setDays] = useState(DEFAULT_DAYS)
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE)
+  const [activeSection, setActiveSection] = useState<"sectionCharts" | "sectionPayload" | "sectionDownlink" | "sectionRecalibrate" | "sectionDataMgmt" | "sectionExport" | "sectionAddDevice" | "sectionDeleteDevice">("sectionCharts")
 
   // Resolve UUID to devEui on mount (for display / SSE matching)
   useEffect(() => {
@@ -140,8 +149,8 @@ export default function DeviceDetailPage() {
 
   // Register controls into the shared sidebar context
   useSetDeviceControls(useMemo(() => ({
-    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui, deviceUuid,
-  }), [days, timezone, refreshing, fetchData, lastUplink, devEui, deviceUuid]))
+    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui, deviceUuid, activeSection, setActiveSection,
+  }), [days, timezone, refreshing, fetchData, lastUplink, devEui, deviceUuid, activeSection]))
 
   if (loading) {
     return (
@@ -166,6 +175,95 @@ export default function DeviceDetailPage() {
   }
 
   const status = getDeviceStatus(device)
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case "sectionPayload":
+        return <LastUplinkPayload uplink={lastUplink} />
+      case "sectionDownlink":
+        return <IntervalDownlinkPanel devEui={devEui} deviceUuid={deviceUuid} />
+      case "sectionRecalibrate":
+        return <RecalibratePanel devEui={devEui} deviceUuid={deviceUuid} />
+      case "sectionDataMgmt":
+        return <DataManagement devEui={deviceUuid} onDataChanged={fetchData} />
+      case "sectionExport":
+        return <ExportPanel devEuiOrUuid={deviceUuid} />
+      case "sectionAddDevice":
+        return (
+          <div className="rounded-xl border border-zinc-200/50 dark:border-zinc-800/50 bg-white/80 dark:bg-zinc-950/80 p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Gerät hinzufügen</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Erstellt ein neues konfiguriertes Gerät über die API.
+            </p>
+            <AddDeviceForm
+              onSubmit={async (data) => {
+                const created = await createConfiguredDevice(data)
+                toast.success(`Gerät "${created.name}" erstellt`, {
+                  description: `UUID: ${created.uuid}`,
+                })
+              }}
+            />
+          </div>
+        )
+      case "sectionDeleteDevice":
+        return <DeleteDevicePanel deviceUuid={deviceUuid} devEui={devEui} />
+      case "sectionCharts":
+      default:
+        return (
+          <div className="space-y-6">
+            <KPICards device={device} deviceType={deviceType} failureCount={failureAnalysis.failures.length} />
+
+            <ControlsPanel
+              days={days}
+              onDaysChange={setDays}
+              timezone={timezone}
+              onTimezoneChange={setTimezone}
+              onRefresh={fetchData}
+              loading={refreshing}
+            />
+
+            <div className="flex justify-end">
+              <Link
+                href={`/device/${encodeURIComponent(deviceUuid)}/failures`}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-400 bg-red-50/60 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-sm font-medium transition-colors"
+              >
+                <AlertTriangle size={16} />
+                Failure-Logs öffnen ({failureAnalysis.failures.length})
+              </Link>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <DailyConsumptionChart data={dailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
+                <MeterBatteryChart unit={unit} readings={readings} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <HourlyConsumptionChart readings={consumptionReadings} unit={unit} />
+                <BatteryDrainChart readings={readings} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <RSSIChart readings={readings} />
+                <IMUChart uplinks={uplinks} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
+                <AnomalyChart anomalies={anomalies} />
+                {deviceType !== "electricity_sml" && <PayloadExplorer uplinks={uplinks} />}
+              </div>
+
+              {deviceType === "electricity_sml" && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <PayloadExplorer uplinks={uplinks} />
+                </div>
+              )}
+            </div>
+          </div>
+        )
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -202,51 +300,7 @@ export default function DeviceDetailPage() {
           <LiveIndicator connected={connected} />
         </motion.div>
 
-        {/* KPI Cards */}
-        <KPICards device={device} deviceType={deviceType} failureCount={failureAnalysis.failures.length} />
-
-        <div className="flex justify-end">
-          <Link
-            href={`/device/${encodeURIComponent(deviceUuid)}/failures`}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/60 text-red-700 dark:text-red-400 bg-red-50/60 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 text-sm font-medium transition-colors"
-          >
-            <AlertTriangle size={16} />
-            Failure-Logs öffnen ({failureAnalysis.failures.length})
-          </Link>
-        </div>
-
-        {/* Charts — always 2 columns per row */}
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DailyConsumptionChart data={dailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
-            <MeterBatteryChart unit={unit} readings={readings} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <HourlyConsumptionChart readings={consumptionReadings} unit={unit} />
-            <BatteryDrainChart readings={readings} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <RSSIChart readings={readings} />
-            <IMUChart uplinks={uplinks} />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
-            <AnomalyChart anomalies={anomalies} />
-            {deviceType !== "electricity_sml" && <PayloadExplorer uplinks={uplinks} />}
-          </div>
-
-          {deviceType === "electricity_sml" && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PayloadExplorer uplinks={uplinks} />
-            </div>
-          )}
-        </div>
-
-        {/* Data Management */}
-        <DataManagement devEui={deviceUuid} onDataChanged={fetchData} />
+        {renderSection()}
       </div>
     </div>
   )
