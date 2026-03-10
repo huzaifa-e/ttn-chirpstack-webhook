@@ -15,6 +15,8 @@ import {
   formatBatteryMv,
   formatRSSI,
   estimateDistance,
+  estimateDeviceUptimeMs,
+  formatDurationShort,
   formatInterval,
   formatTimeAgo,
   getDeviceStatus,
@@ -81,6 +83,7 @@ export const DeviceCard: React.FC<{
   const [currentType, setCurrentType] = useState(deviceType)
   const status = getDeviceStatus(device)
   const config = DEVICE_TYPE_CONFIG[currentType]
+  const uptimeMs = estimateDeviceUptimeMs(device)
 
   const handleTypeChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newType = e.target.value as DeviceType
@@ -121,6 +124,9 @@ export const DeviceCard: React.FC<{
                 </h3>
                 <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono tracking-wider truncate">
                   {device.dev_eui}
+                </p>
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
+                  Up seit {formatDurationShort(uptimeMs)}
                 </p>
               </div>
             </div>

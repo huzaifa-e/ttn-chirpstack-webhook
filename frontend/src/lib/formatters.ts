@@ -64,6 +64,19 @@ export function formatInterval(seconds: number | null): string {
   return `${(seconds / 3600).toFixed(1)}h`
 }
 
+export function formatDurationShort(ms: number | null): string {
+  if (ms == null || ms <= 0) return "—"
+  const totalMinutes = Math.floor(ms / 60000)
+  const totalHours = Math.floor(totalMinutes / 60)
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  const minutes = totalMinutes % 60
+
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`
+  if (totalHours > 0) return minutes > 0 ? `${totalHours}h ${minutes}min` : `${totalHours}h`
+  return `${Math.max(totalMinutes, 1)}min`
+}
+
 export function formatChartNumber(value: unknown): string {
   if (typeof value !== "number" || Number.isNaN(value)) return String(value ?? "")
   return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 2, useGrouping: false }).format(value)
@@ -93,6 +106,27 @@ export function getDeviceStatus(device: DeviceSummary): DeviceStatus {
   if (elapsed <= interval * STATUS_ACTIVE_MULTIPLIER) return "active"
   if (elapsed <= interval * STATUS_WARNING_MULTIPLIER) return "warning"
   return "offline"
+}
+
+export function estimateDeviceUptimeMs(device: DeviceSummary): number | null {
+  const status = getDeviceStatus(device)
+  if (status === "offline" || status === "inactive") return null
+  if (!device.last_seen || !device.first_seen) return null
+
+  const firstSeen = new Date(device.first_seen).getTime()
+  const lastSeen = new Date(device.last_seen).getTime()
+  if (!Number.isFinite(firstSeen) || !Number.isFinite(lastSeen) || lastSeen <= firstSeen) return null
+
+  const observedWindowMs = lastSeen - firstSeen
+  if (!device.avg_interval_seconds || device.total_uplinks <= 1) return observedWindowMs
+
+  // Approximate uninterrupted runtime from expected packet cadence. This caps
+  // the streak when the packet count suggests major gaps in the observed window.
+  const cadenceWindowMs = Math.max(0, (device.total_uplinks - 1) * device.avg_interval_seconds * 1000)
+  const continuityRatio = cadenceWindowMs / observedWindowMs
+
+  if (continuityRatio >= 0.85) return observedWindowMs
+  return cadenceWindowMs
 }
 
 export const STATUS_CONFIG: Record<DeviceStatus, { label: string; color: string; bgColor: string }> = {
