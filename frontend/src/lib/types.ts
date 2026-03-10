@@ -15,6 +15,10 @@ export interface DeviceSummary {
   meter_value: number | null
   meter_value_raw: string | null
   uuid: string | null
+  /** Start of the last (or current) continuous uplink streak */
+  last_streak_start: string | null
+  /** End of the last streak (= last_seen when currently active) */
+  last_streak_end: string | null
 }
 
 export interface ConfiguredDevice {

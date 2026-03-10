@@ -764,6 +764,8 @@ app.get("/api/device-summaries", (_req, res) => {
         meter_value: null,
         meter_value_raw: null,
         uuid: cfg.uuid,
+        last_streak_start: null,
+        last_streak_end: null,
       });
     }
   }

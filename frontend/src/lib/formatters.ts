@@ -110,23 +110,23 @@ export function getDeviceStatus(device: DeviceSummary): DeviceStatus {
 
 export function estimateDeviceUptimeMs(device: DeviceSummary): number | null {
   const status = getDeviceStatus(device)
-  if (status === "offline" || status === "inactive") return null
-  if (!device.last_seen || !device.first_seen) return null
+  if (status === "inactive") return null
 
-  const firstSeen = new Date(device.first_seen).getTime()
-  const lastSeen = new Date(device.last_seen).getTime()
-  if (!Number.isFinite(firstSeen) || !Number.isFinite(lastSeen) || lastSeen <= firstSeen) return null
+  const streakStart = device.last_streak_start ? new Date(device.last_streak_start).getTime() : null
+  const streakEnd = device.last_streak_end ? new Date(device.last_streak_end).getTime() : null
 
-  const observedWindowMs = lastSeen - firstSeen
-  if (!device.avg_interval_seconds || device.total_uplinks <= 1) return observedWindowMs
+  if (streakStart && Number.isFinite(streakStart)) {
+    if (status === "active" || status === "warning") {
+      // Device is currently online – uptime = now minus streak start
+      return Date.now() - streakStart
+    }
+    // Device is offline – show duration of last run (streak end - streak start)
+    if (streakEnd && Number.isFinite(streakEnd) && streakEnd > streakStart) {
+      return streakEnd - streakStart
+    }
+  }
 
-  // Approximate uninterrupted runtime from expected packet cadence. This caps
-  // the streak when the packet count suggests major gaps in the observed window.
-  const cadenceWindowMs = Math.max(0, (device.total_uplinks - 1) * device.avg_interval_seconds * 1000)
-  const continuityRatio = cadenceWindowMs / observedWindowMs
-
-  if (continuityRatio >= 0.85) return observedWindowMs
-  return cadenceWindowMs
+  return null
 }
 
 export const STATUS_CONFIG: Record<DeviceStatus, { label: string; color: string; bgColor: string }> = {

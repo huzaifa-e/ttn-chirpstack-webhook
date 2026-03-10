@@ -821,7 +821,18 @@ export interface DeviceSummary {
   first_seen: string | null;
   meter_value: number | null;
   meter_value_raw: string | null;
+  /** Start of the last (or current) continuous uplink streak */
+  last_streak_start: string | null;
+  /** End of the last streak (= last_seen when currently active) */
+  last_streak_end: string | null;
 }
+
+const stmtUplinkTimestamps = db.prepare(`
+  SELECT at FROM uplinks WHERE dev_eui = ? ORDER BY at ASC
+`);
+
+/** Gap detection multiplier – a gap wider than avg_interval * this is an offline break */
+const STREAK_GAP_MULTIPLIER = 6;
 
 export function getDeviceSummaries(): DeviceSummary[] {
   const devices = listDevices();
@@ -842,6 +853,24 @@ export function getDeviceSummaries(): DeviceSummary[] {
       avgInterval = Math.round((last - first) / (stats.cnt - 1) / 1000);
     }
 
+    // Detect the last continuous streak by scanning for offline gaps
+    let lastStreakStart: string | null = stats?.first_at ?? null;
+    const lastStreakEnd: string | null = stats?.last_at ?? null;
+
+    if (stats && stats.cnt > 1 && avgInterval) {
+      const gapThreshold = avgInterval * STREAK_GAP_MULTIPLIER * 1000; // in ms
+      const timestamps = stmtUplinkTimestamps.all(d.dev_eui) as Array<{ at: string }>;
+
+      for (let i = 1; i < timestamps.length; i++) {
+        const prev = new Date(timestamps[i - 1].at).getTime();
+        const curr = new Date(timestamps[i].at).getTime();
+        if (curr - prev > gapThreshold) {
+          // Found an offline gap – streak restarts at this uplink
+          lastStreakStart = timestamps[i].at;
+        }
+      }
+    }
+
     summaries.push({
       dev_eui: d.dev_eui,
       device_name: d.device_name ?? null,
@@ -854,6 +883,8 @@ export function getDeviceSummaries(): DeviceSummary[] {
       first_seen: stats?.first_at ?? null,
       meter_value: lastRead?.meter_value ?? null,
       meter_value_raw: lastRead?.meter_value_raw ?? null,
+      last_streak_start: lastStreakStart,
+      last_streak_end: lastStreakEnd,
     });
   }
   return summaries;

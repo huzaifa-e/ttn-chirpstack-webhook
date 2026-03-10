@@ -126,7 +126,9 @@ export const DeviceCard: React.FC<{
                   {device.dev_eui}
                 </p>
                 <p className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate">
-                  Up seit {formatDurationShort(uptimeMs)}
+                  {status === "offline"
+                    ? `Letzter Lauf ${formatDurationShort(uptimeMs)}`
+                    : `Up seit ${formatDurationShort(uptimeMs)}`}
                 </p>
               </div>
             </div>
