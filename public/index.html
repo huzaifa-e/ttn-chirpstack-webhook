@@ -517,6 +517,86 @@
     .toast.success { border-left: 3px solid var(--ttn-green); }
     .toast.error { border-left: 3px solid var(--ttn-red); }
     .toast.info { border-left: 3px solid var(--ttn-accent); }
+
+    /* =================== DETAIL SIDEBAR LAYOUT =================== */
+    .detail-layout {
+      display: flex;
+      gap: 0;
+      min-height: calc(100vh - 56px - 48px);
+    }
+    .detail-sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--ttn-sidebar);
+      border: 1px solid var(--ttn-border);
+      border-radius: var(--radius);
+      padding: 8px;
+      position: sticky;
+      top: 80px;
+      align-self: flex-start;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--ttn-gray);
+      padding: 12px 10px 4px;
+    }
+    .sidebar-section-title:first-child { padding-top: 6px; }
+    .sidebar-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 9px 12px;
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      color: var(--ttn-gray-light);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+      text-align: left;
+    }
+    .sidebar-btn:hover { background: rgba(255,255,255,.05); color: #fff; }
+    .sidebar-btn.active { background: rgba(67,97,238,.15); color: #fff; }
+    .sidebar-btn .sidebar-icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .sidebar-btn .sidebar-icon svg { width: 16px; height: 16px; }
+    .detail-content {
+      flex: 1;
+      min-width: 0;
+      padding-left: 20px;
+    }
+    .detail-section { display: none; }
+    .detail-section.active { display: block; }
+
+    @media (max-width: 768px) {
+      .detail-layout { flex-direction: column; }
+      .detail-sidebar {
+        width: 100%;
+        position: static;
+        flex-direction: row;
+        overflow-x: auto;
+        gap: 2px;
+        padding: 6px;
+        margin-bottom: 16px;
+      }
+      .sidebar-section-title { display: none; }
+      .sidebar-btn { white-space: nowrap; padding: 7px 10px; font-size: 12px; }
+      .detail-content { padding-left: 0; }
+    }
   </style>
 </head>
 <body>
@@ -582,155 +662,298 @@
         <div class="detail-hero-name" id="detailName">—</div>
         <div class="detail-hero-eui" id="detailEui">—</div>
       </div>
-      <div class="detail-hero-actions">
-        <button class="btn btn-success" id="downloadJson">JSON</button>
-        <button class="btn btn-success" id="downloadCsv">CSV</button>
-        <button class="btn btn-danger" id="deleteDevice">Gerät löschen</button>
-      </div>
     </div>
 
-    <!-- KPI -->
-    <div class="kpi-row">
-      <div class="kpi-card">
-        <div class="kpi-label">Letzter Uplink</div>
-        <div class="kpi-value" id="kpiLastSeen">—</div>
-        <div class="kpi-sub" id="kpiLastSeenAgo"></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Batterie</div>
-        <div class="kpi-value" id="kpiBattery">—</div>
-        <div class="kpi-sub" id="kpiBatterySub"></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">RSSI</div>
-        <div class="kpi-value" id="kpiRssi">—</div>
-        <div class="kpi-sub" id="kpiRssiSub"></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Zählerstand</div>
-        <div class="kpi-value" id="kpiMeter">—</div>
-        <div class="kpi-sub" id="kpiMeterSub"></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Upload-Intervall</div>
-        <div class="kpi-value" id="kpiInterval">—</div>
-        <div class="kpi-sub" id="kpiIntervalSub"></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Gesamte Uplinks</div>
-        <div class="kpi-value" id="kpiTotal">—</div>
-        <div class="kpi-sub" id="kpiTotalSub"></div>
-      </div>
-    </div>
+    <div class="detail-layout">
+      <!-- ===== LEFT SIDEBAR ===== -->
+      <nav class="detail-sidebar">
+        <div class="sidebar-section-title">Ansicht</div>
+        <button class="sidebar-btn active" onclick="showDetailSection('sectionCharts')" data-section="sectionCharts">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></span>
+          Diagramme
+        </button>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionPayload')" data-section="sectionPayload">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span>
+          Letzter Payload
+        </button>
 
-    <!-- Last Uplink Payload -->
-    <div class="chart-card" style="margin-bottom:20px">
-      <div class="chart-card-header"><span class="chart-card-title">Letzter Uplink-Payload</span></div>
-      <div class="chart-card-subtitle" id="payloadMeta" style="margin-top:0;margin-bottom:8px">—</div>
-      <pre class="payload-pre" id="payloadJson">—</pre>
-    </div>
+        <div class="sidebar-section-title">Steuerung</div>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionDownlink')" data-section="sectionDownlink">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          Downlink
+        </button>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionRecalibrate')" data-section="sectionRecalibrate">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+          Rekalibrierung
+        </button>
 
-    <!-- Controls -->
-    <div class="controls-bar">
-      <label>Tage</label>
-      <input id="days" type="number" min="1" max="365" value="30" style="width:70px" />
-      <label>Zeitzone</label>
-      <input id="tz" type="text" value="Europe/Berlin" style="width:140px" />
-      <button class="btn btn-primary" id="refresh">Aktualisieren</button>
-    </div>
+        <div class="sidebar-section-title">Daten</div>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionDataMgmt')" data-section="sectionDataMgmt">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
+          Datenverwaltung
+        </button>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionExport')" data-section="sectionExport">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          Export
+        </button>
 
-    <!-- Downlink Controls -->
-    <div class="controls-bar">
-      <label>Upload-Intervall</label>
-      <input id="uploadIntervalVal" type="number" min="1" step="1" value="5" style="width:80px" />
-      <select id="uploadIntervalUnit" style="width:100px">
-        <option value="s">Sekunden</option>
-        <option value="m" selected>Minuten</option>
-        <option value="h">Stunden</option>
-      </select>
-      <label>fPort</label>
-      <input id="downlinkFPort" type="number" min="1" max="255" step="1" value="15" style="width:70px" />
-      <button class="btn btn-primary" id="setUploadInterval"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Intervall setzen</button>
-      <span style="color:var(--ttn-border);font-size:18px;margin:0 4px">│</span>
-      <button class="btn btn-danger" id="sendRecalibrate" title="Sendet {recalibrate: 1} als Downlink">⟳ Rekalibrierung senden</button>
-    </div>
+        <div class="sidebar-section-title">Gerät</div>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionAddDevice')" data-section="sectionAddDevice">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          Gerät hinzufügen
+        </button>
+        <button class="sidebar-btn" onclick="showDetailSection('sectionDeleteDevice')" data-section="sectionDeleteDevice">
+          <span class="sidebar-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></span>
+          Gerät löschen
+        </button>
+      </nav>
 
-    <!-- Data management -->
-    <div class="data-section">
-      <h3>Datenverwaltung</h3>
-      <div class="data-row">
-        <label>Zeitraum:</label>
-        <input id="fromDt" type="datetime-local" />
-        <span style="color:var(--ttn-gray)">bis</span>
-        <input id="toDt" type="datetime-local" />
-        <button class="btn btn-ghost" id="setNow">Jetzt</button>
-        <label>Quelle:</label>
-        <select id="deleteSource">
-          <option value="both">Beide</option>
-          <option value="readings">Readings</option>
-          <option value="uplinks">Uplinks</option>
-        </select>
-      </div>
-      <div class="data-row">
-        <button class="btn btn-ghost" id="countTx">Uploads zählen</button>
-        <button class="btn btn-danger" id="deleteRange">Bereich löschen</button>
-        <label>Einzelpunkt:</label>
-        <input id="pointDt" type="datetime-local" />
-        <button class="btn btn-danger" id="deletePoint">Punkt löschen</button>
-      </div>
-      <div id="txOut"></div>
-    </div>
+      <!-- ===== RIGHT CONTENT ===== -->
+      <div class="detail-content">
 
-    <!-- Charts -->
-    <div class="chart-grid">
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">Tagesverbrauch</span></div>
-        <div id="chartDaily"></div>
-        <div class="chart-card-subtitle">Balken = Tagesverbrauch · Linie = Zählerstand (Tagesschluss)</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">Stündlicher Verbrauch</span></div>
-        <div id="chartHourly"></div>
-        <div class="chart-card-subtitle">Verbrauch pro Stunde (interpoliert aus Zählerstand)</div>
-      </div>
-      <div class="chart-card" id="chartSmlPowerCard" style="display:none">
-        <div class="chart-card-header"><span class="chart-card-title">Live</span></div>
-        <div id="chartSmlPower"></div>
-        <div class="chart-card-subtitle">Negativ = Einspeisung · Positiv = Netzbezug · Einheit kW</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">Batteriespannung (mV)</span></div>
-        <div id="chartBattery"></div>
-        <div class="chart-card-subtitle">Zoom: Bereich markieren · Tooltip zeigt Batterie + Zähler</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">Stündlicher Batterieverbrauch</span></div>
-        <div id="chartHourlyBattery"></div>
-        <div class="chart-card-subtitle">Batterie-Änderung pro Stunde (mV/h)</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">RSSI über Zeit</span></div>
-        <div id="chartRssi"></div>
-        <div class="chart-card-subtitle">Signal-Stärke (dBm) · Tooltip zeigt RSSI, SNR und Zähler</div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-card-header"><span class="chart-card-title">IMU Position (ax / ay / az)</span></div>
-        <div id="chartImu"></div>
-        <div class="chart-card-subtitle">Beschleunigungssensor-Daten (imu_ax, imu_ay, imu_az)</div>
-      </div>
-      <div class="chart-card chart-card-full">
-        <div class="chart-card-header"><span class="chart-card-title">Fehler / Anomalien (OCR-Ausreißer & Rekalibrierungen)</span></div>
-        <div id="chartAnomalies"></div>
-        <div id="anomalyTable" style="margin-top:12px"></div>
-        <div class="chart-card-subtitle">Automatisch erkannte Zähler-Ausreißer und Rekalibrierungen · Rote Punkte = Overshoot · Blaue = Manuelle Rekalibrierung</div>
-      </div>
-      <div class="chart-card chart-card-full">
-        <div class="chart-card-header"><span class="chart-card-title">Payload Explorer</span></div>
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
-          <label style="font-size:12px;color:var(--ttn-gray)">Feld:</label>
-          <select id="fieldSel" style="flex:1;max-width:300px"></select>
+        <!-- SECTION: Charts (default) -->
+        <div id="sectionCharts" class="detail-section active">
+          <!-- KPI -->
+          <div class="kpi-row">
+            <div class="kpi-card">
+              <div class="kpi-label">Letzter Uplink</div>
+              <div class="kpi-value" id="kpiLastSeen">—</div>
+              <div class="kpi-sub" id="kpiLastSeenAgo"></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Batterie</div>
+              <div class="kpi-value" id="kpiBattery">—</div>
+              <div class="kpi-sub" id="kpiBatterySub"></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">RSSI</div>
+              <div class="kpi-value" id="kpiRssi">—</div>
+              <div class="kpi-sub" id="kpiRssiSub"></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Zählerstand</div>
+              <div class="kpi-value" id="kpiMeter">—</div>
+              <div class="kpi-sub" id="kpiMeterSub"></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Upload-Intervall</div>
+              <div class="kpi-value" id="kpiInterval">—</div>
+              <div class="kpi-sub" id="kpiIntervalSub"></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Gesamte Uplinks</div>
+              <div class="kpi-value" id="kpiTotal">—</div>
+              <div class="kpi-sub" id="kpiTotalSub"></div>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="controls-bar">
+            <label>Tage</label>
+            <input id="days" type="number" min="1" max="365" value="30" style="width:70px" />
+            <label>Zeitzone</label>
+            <input id="tz" type="text" value="Europe/Berlin" style="width:140px" />
+            <button class="btn btn-primary" id="refresh">Aktualisieren</button>
+          </div>
+
+          <!-- Charts -->
+          <div class="chart-grid">
+            <div class="chart-card">
+              <div class="chart-card-header"><span class="chart-card-title">Tagesverbrauch</span></div>
+              <div id="chartDaily"></div>
+              <div class="chart-card-subtitle">Balken = Tagesverbrauch · Linie = Zählerstand (Tagesschluss)</div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-header"><span class="chart-card-title">Stündlicher Verbrauch</span></div>
+              <div id="chartHourly"></div>
+              <div class="chart-card-subtitle">Verbrauch pro Stunde (interpoliert aus Zählerstand)</div>
+            </div>
+            <div class="chart-card" id="chartSmlPowerCard" style="display:none">
+              <div class="chart-card-header"><span class="chart-card-title">Live</span></div>
+              <div id="chartSmlPower"></div>
+              <div class="chart-card-subtitle">Negativ = Einspeisung · Positiv = Netzbezug · Einheit kW</div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-header"><span class="chart-card-title">Batteriespannung (mV)</span></div>
+              <div id="chartBattery"></div>
+              <div class="chart-card-subtitle">Zoom: Bereich markieren · Tooltip zeigt Batterie + Zähler</div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-header"><span class="chart-card-title">Stündlicher Batterieverbrauch</span></div>
+              <div id="chartHourlyBattery"></div>
+              <div class="chart-card-subtitle">Batterie-Änderung pro Stunde (mV/h)</div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-header"><span class="chart-card-title">RSSI über Zeit</span></div>
+              <div id="chartRssi"></div>
+              <div class="chart-card-subtitle">Signal-Stärke (dBm) · Tooltip zeigt RSSI, SNR und Zähler</div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-card-header"><span class="chart-card-title">IMU Position (ax / ay / az)</span></div>
+              <div id="chartImu"></div>
+              <div class="chart-card-subtitle">Beschleunigungssensor-Daten (imu_ax, imu_ay, imu_az)</div>
+            </div>
+            <div class="chart-card chart-card-full">
+              <div class="chart-card-header"><span class="chart-card-title">Fehler / Anomalien (OCR-Ausreißer & Rekalibrierungen)</span></div>
+              <div id="chartAnomalies"></div>
+              <div id="anomalyTable" style="margin-top:12px"></div>
+              <div class="chart-card-subtitle">Automatisch erkannte Zähler-Ausreißer und Rekalibrierungen · Rote Punkte = Overshoot · Blaue = Manuelle Rekalibrierung</div>
+            </div>
+            <div class="chart-card chart-card-full">
+              <div class="chart-card-header"><span class="chart-card-title">Payload Explorer</span></div>
+              <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;">
+                <label style="font-size:12px;color:var(--ttn-gray)">Feld:</label>
+                <select id="fieldSel" style="flex:1;max-width:300px"></select>
+              </div>
+              <div id="chartField"></div>
+            </div>
+          </div>
         </div>
-        <div id="chartField"></div>
+
+        <!-- SECTION: Last Payload -->
+        <div id="sectionPayload" class="detail-section">
+          <div class="chart-card">
+            <div class="chart-card-header"><span class="chart-card-title">Letzter Uplink-Payload</span></div>
+            <div class="chart-card-subtitle" id="payloadMeta" style="margin-top:0;margin-bottom:8px">—</div>
+            <pre class="payload-pre" id="payloadJson">—</pre>
+          </div>
+        </div>
+
+        <!-- SECTION: Downlink (Upload Interval) -->
+        <div id="sectionDownlink" class="detail-section">
+          <div class="data-section">
+            <h3>Upload-Intervall setzen</h3>
+            <div class="data-row">
+              <label>Intervall:</label>
+              <input id="uploadIntervalVal" type="number" min="1" step="1" value="5" style="width:80px" />
+              <select id="uploadIntervalUnit" style="width:100px">
+                <option value="s">Sekunden</option>
+                <option value="m" selected>Minuten</option>
+                <option value="h">Stunden</option>
+              </select>
+            </div>
+            <div class="data-row">
+              <label>fPort:</label>
+              <input id="downlinkFPort" type="number" min="1" max="255" step="1" value="15" style="width:70px" />
+            </div>
+            <div class="data-row" style="margin-top:8px">
+              <button class="btn btn-primary" id="setUploadInterval"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Intervall setzen</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Recalibrate -->
+        <div id="sectionRecalibrate" class="detail-section">
+          <div class="data-section">
+            <h3>Rekalibrierung senden</h3>
+            <p style="font-size:13px;color:var(--ttn-gray);margin-bottom:12px">
+              Sendet <code style="color:var(--ttn-gray-light)">{recalibrate: 1}</code> als Downlink an das Gerät.
+              Dies veranlasst das Gerät, den Zählerstand neu zu kalibrieren.
+            </p>
+            <div class="data-row">
+              <label>fPort:</label>
+              <input id="recalibrateFPort" type="number" min="1" max="255" step="1" value="15" style="width:70px" />
+            </div>
+            <div class="data-row" style="margin-top:8px">
+              <button class="btn btn-danger" id="sendRecalibrate">Rekalibrierung senden</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Data Management -->
+        <div id="sectionDataMgmt" class="detail-section">
+          <div class="data-section">
+            <h3>Datenverwaltung</h3>
+            <div class="data-row">
+              <label>Zeitraum:</label>
+              <input id="fromDt" type="datetime-local" />
+              <span style="color:var(--ttn-gray)">bis</span>
+              <input id="toDt" type="datetime-local" />
+              <button class="btn btn-ghost" id="setNow">Jetzt</button>
+            </div>
+            <div class="data-row">
+              <label>Quelle:</label>
+              <select id="deleteSource">
+                <option value="both">Beide</option>
+                <option value="readings">Readings</option>
+                <option value="uplinks">Uplinks</option>
+              </select>
+            </div>
+            <div class="data-row">
+              <button class="btn btn-ghost" id="countTx">Uploads zählen</button>
+              <button class="btn btn-danger" id="deleteRange">Bereich löschen</button>
+            </div>
+            <div class="data-row" style="margin-top:8px;padding-top:12px;border-top:1px solid var(--ttn-border)">
+              <label>Einzelpunkt:</label>
+              <input id="pointDt" type="datetime-local" />
+              <button class="btn btn-danger" id="deletePoint">Punkt löschen</button>
+            </div>
+            <div id="txOut"></div>
+          </div>
+        </div>
+
+        <!-- SECTION: Export -->
+        <div id="sectionExport" class="detail-section">
+          <div class="data-section">
+            <h3>Daten exportieren</h3>
+            <p style="font-size:13px;color:var(--ttn-gray);margin-bottom:12px">
+              Exportiert alle Uplink-Daten des aktuellen Geräts. Optional kann ein Zeitraum unter „Datenverwaltung" gesetzt werden.
+            </p>
+            <div class="data-row">
+              <button class="btn btn-success" id="downloadJson" style="min-width:120px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>JSON exportieren</button>
+              <button class="btn btn-success" id="downloadCsv" style="min-width:120px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV exportieren</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION: Add Device -->
+        <div id="sectionAddDevice" class="detail-section">
+          <div class="data-section">
+            <h3>Neues Gerät hinzufügen</h3>
+            <p style="font-size:13px;color:var(--ttn-gray);margin-bottom:16px">
+              Registriert ein neues Gerät manuell. Das Gerät wird in der Übersicht angezeigt, sobald es seinen ersten Uplink sendet.
+            </p>
+            <div class="data-row">
+              <label>Device EUI:</label>
+              <input id="addDevEui" type="text" placeholder="z.B. 0011223344556677" style="width:220px;font-family:'SF Mono','Cascadia Code',monospace;font-size:12px" />
+            </div>
+            <div class="data-row">
+              <label>Name:</label>
+              <input id="addDevName" type="text" placeholder="z.B. Gaszähler Keller" style="width:220px" />
+            </div>
+            <div class="data-row">
+              <label>Gerätetyp:</label>
+              <select id="addDevType" style="width:220px">
+                <option value="unknown">Ohne Typ</option>
+                <option value="gas">Gas</option>
+                <option value="electricity_ferraris">Strom (Ferraris)</option>
+                <option value="electricity_sml">Strom (SML/Digital)</option>
+                <option value="water">Wasser</option>
+              </select>
+            </div>
+            <div class="data-row" style="margin-top:8px">
+              <button class="btn btn-primary" id="addDeviceBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Gerät anlegen</button>
+            </div>
+            <div id="addDevOut" style="font-size:12px;color:var(--ttn-gray);margin-top:8px"></div>
+          </div>
+        </div>
+
+        <!-- SECTION: Delete Device -->
+        <div id="sectionDeleteDevice" class="detail-section">
+          <div class="data-section">
+            <h3>Gerät löschen</h3>
+            <p style="font-size:13px;color:var(--ttn-red);margin-bottom:16px">
+              Achtung: Alle Daten dieses Geräts werden unwiderruflich entfernt!
+            </p>
+            <div class="data-row">
+              <span style="font-size:13px;color:var(--ttn-gray-light)">Gerät: <strong id="deleteDevEuiLabel">—</strong></span>
+            </div>
+            <div class="data-row" style="margin-top:8px">
+              <button class="btn btn-danger" id="deleteDevice"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Gerät endgültig löschen</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -879,6 +1102,16 @@ async function onDeviceTypeChange(event, devEui) {
   } catch (err) {
     showToast('Gerätetyp konnte nicht gespeichert werden', 'error');
   }
+}
+
+// =================== DETAIL SIDEBAR NAVIGATION ===================
+function showDetailSection(sectionId) {
+  document.querySelectorAll('.detail-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.sidebar-btn').forEach(b => b.classList.remove('active'));
+  const sec = $(sectionId);
+  if (sec) sec.classList.add('active');
+  const btn = document.querySelector(`.sidebar-btn[data-section="${sectionId}"]`);
+  if (btn) btn.classList.add('active');
 }
 
 // =================== NAVIGATION ===================
@@ -1235,6 +1468,7 @@ async function refreshDetail() {
   }
   $('detailName').textContent = dev?.device_name || 'Unbenannt';
   $('detailEui').textContent = currentDevEui;
+  if ($('deleteDevEuiLabel')) $('deleteDevEuiLabel').textContent = currentDevEui;
 
   // KPIs
   try {
@@ -1920,7 +2154,7 @@ $('setUploadInterval').addEventListener('click', async () => {
 
 $('sendRecalibrate').addEventListener('click', async () => {
   if (!currentDevEui) return;
-  const fPort = Number($('downlinkFPort').value || 15);
+  const fPort = Number($('recalibrateFPort')?.value || $('downlinkFPort')?.value || 15);
   if (!confirm(`Rekalibrierung für ${currentDevEui} senden?\nDies sendet {recalibrate: 1} als Downlink.`)) return;
 
   try {
@@ -1992,6 +2226,42 @@ $('deleteDevice').addEventListener('click', async () => {
   showToast('Gerät gelöscht', 'success');
   currentDevEui = null;
   showPage('overview');
+});
+
+$('addDeviceBtn').addEventListener('click', async () => {
+  const devEui = ($('addDevEui').value || '').trim();
+  const devName = ($('addDevName').value || '').trim();
+  const devType = $('addDevType').value || 'unknown';
+
+  if (!devEui) {
+    showToast('Bitte eine Device EUI eingeben', 'error');
+    return;
+  }
+  if (!/^[0-9a-fA-F]{16}$/.test(devEui)) {
+    showToast('Device EUI muss 16 Hex-Zeichen lang sein', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/configured-devices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dev_eui: devEui, name: devName || devEui, device_type: devType }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToast(j?.error ? `Fehler: ${j.error}` : `Fehler: HTTP ${res.status}`, 'error');
+      return;
+    }
+    showToast(`Gerät ${devEui} angelegt`, 'success');
+    $('addDevEui').value = '';
+    $('addDevName').value = '';
+    $('addDevType').value = 'unknown';
+    $('addDevOut').textContent = `Gerät ${devEui} erfolgreich registriert.`;
+    loadOverview();
+  } catch (err) {
+    showToast('Gerät konnte nicht angelegt werden', 'error');
+  }
 });
 
 // =================== SSE AUTO-UPDATE ===================
