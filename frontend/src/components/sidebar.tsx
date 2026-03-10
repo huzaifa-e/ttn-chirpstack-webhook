@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { EmoniLogo } from "./emoni-logo"
 import { useDeviceControls } from "@/lib/device-controls-context"
+import { useHomeControls } from "@/lib/home-controls-context"
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -57,7 +58,9 @@ export function Sidebar() {
   const [hovered, setHovered] = useState(false)
   const collapsed = !hovered
   const deviceControls = useDeviceControls()
+  const homeControls = useHomeControls()
   const isDevicePage = pathname.startsWith("/device/")
+  const isHomePage = pathname === "/"
 
   const expandedWidth = isDevicePage && deviceControls ? 320 : 220
 
@@ -103,6 +106,20 @@ export function Sidebar() {
             </Link>
           )
         })}
+
+        {isHomePage && homeControls && (
+          <button
+            type="button"
+            onClick={homeControls.openAddDevice}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/60 ${collapsed ? "justify-center" : ""}`}
+            title={collapsed ? "Gerät hinzufügen" : undefined}
+          >
+            <Plus size={20} className="shrink-0" />
+            <span className={`overflow-hidden whitespace-nowrap transition-all duration-150 ${collapsed ? "w-0 opacity-0" : "w-auto opacity-100"}`}>
+              Gerät hinzufügen
+            </span>
+          </button>
+        )}
 
       </nav>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
@@ -13,6 +13,7 @@ import { AddDeviceModal } from "@/components/add-device-modal"
 import { LiveIndicator } from "@/components/live-indicator"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { getDeviceSummaries, getDeviceTypes, getReadings, createConfiguredDevice } from "@/lib/api"
+import { useSetHomeControls } from "@/lib/home-controls-context"
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
 import type { DeviceSummary, DeviceType, DeviceStatus, SSEEvent } from "@/lib/types"
@@ -26,6 +27,10 @@ export default function Home() {
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isAddDeviceOpen, setIsAddDeviceOpen] = useState(false)
   const [filterType, setFilterType] = useState<DeviceType | "all">("all")
+
+  useSetHomeControls(useMemo(() => ({
+    openAddDevice: () => setIsAddDeviceOpen(true),
+  }), []))
 
   const fetchData = useCallback(async () => {
     try {
@@ -179,16 +184,6 @@ export default function Home() {
                 <option value="electricity_sml">Strom (SML)</option>
                 <option value="unknown">Ohne Typ</option>
               </select>
-
-              {/* Add Device button */}
-              <motion.button
-                onClick={() => setIsAddDeviceOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all text-xs"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <span>+ Gerät</span>
-              </motion.button>
 
               {/* Search button */}
               <motion.button
