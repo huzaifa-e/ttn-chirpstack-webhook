@@ -139,11 +139,15 @@ function MonthGrid({
 
   const days = month.daysInMonth
   const range = month.max - month.min
-  const svgH = Math.min(width, 280)
-  const chartW = width - MARGIN.left - MARGIN.right
-  const chartH = svgH - MARGIN.top - MARGIN.bottom
-  const cellW = chartW / days
-  const cellH = chartH / 24
+  // Make cells square: derive cell size from fixed chart height
+  const maxChartH = 280 - MARGIN.top - MARGIN.bottom
+  const cellSize = Math.min(maxChartH / 24, (width - MARGIN.left - MARGIN.right) / days)
+  const chartW = cellSize * days
+  const chartH = cellSize * 24
+  const svgW = chartW + MARGIN.left + MARGIN.right
+  const svgH = chartH + MARGIN.top + MARGIN.bottom
+  const cellW = cellSize
+  const cellH = cellSize
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
@@ -184,7 +188,7 @@ function MonthGrid({
       <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">{month.label}</span>
       <svg
         ref={svgRef}
-        width={width}
+        width={svgW}
         height={svgH}
         className="select-none"
         onMouseMove={handleMouseMove}
