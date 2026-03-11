@@ -104,12 +104,11 @@ function buildMonthlyHeatmapData(readings: Reading[]): MonthData[] {
 /* ── tooltip ────────────────────────────────────────────────────── */
 
 interface TooltipInfo {
-  x: number
-  y: number
+  pageX: number
+  pageY: number
   date: string
   hour: number
   consumption: number
-  side: "left" | "right"
 }
 
 /* ── single month SVG ───────────────────────────────────────────── */
@@ -121,13 +120,11 @@ function MonthGrid({
   width,
   unit,
   onTooltip,
-  side,
 }: {
   month: MonthData
   width: number
   unit: string
   onTooltip: (info: TooltipInfo | null) => void
-  side: "left" | "right"
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
 
@@ -170,15 +167,14 @@ function MonthGrid({
       const dateStr = `${y}-${m}-${String(day).padStart(2, "0")}`
 
       onTooltip({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        pageX: e.clientX,
+        pageY: e.clientY,
         date: dateStr,
         hour,
         consumption: cellMap.get(`${day}|${hour}`) ?? 0,
-        side,
       })
     },
-    [month, cellMap, cellW, cellH, days, onTooltip, side],
+    [month, cellMap, cellW, cellH, days, onTooltip],
   )
 
   const tickEvery = days > 20 ? 5 : days > 14 ? 3 : 2
@@ -349,9 +345,9 @@ export function ConsumptionHeatmap({ readings, unit }: { readings: Reading[]; un
           <>
             <div className={`flex items-start ${showTwo ? "justify-between" : "justify-center"}`} style={{ gap }}>
               {showTwo && (
-                <MonthGrid month={leftMonth} width={monthW} unit={unit} onTooltip={setTooltip} side="left" />
+                <MonthGrid month={leftMonth} width={monthW} unit={unit} onTooltip={setTooltip} />
               )}
-              <MonthGrid month={rightMonth} width={monthW} unit={unit} onTooltip={setTooltip} side="right" />
+              <MonthGrid month={rightMonth} width={monthW} unit={unit} onTooltip={setTooltip} />
             </div>
 
             {/* Shared legend */}
@@ -380,26 +376,14 @@ export function ConsumptionHeatmap({ readings, unit }: { readings: Reading[]; un
         )}
       </div>
 
-      {/* Floating HTML tooltip (renders above SVGs) */}
+      {/* Floating tooltip positioned at cursor */}
       {tooltip && (
         <div
           className="fixed z-50 pointer-events-none px-2.5 py-1.5 rounded-md bg-black/85 text-white text-[11px] leading-snug whitespace-nowrap"
           style={{
-            left: tooltip.x,
-            top: tooltip.y,
-            transform: "translate(12px, -120%)",
-          }}
-          ref={(el) => {
-            // Reposition relative to mouse using the SVG's bounding rect
-            if (!el) return
-            const svgEls = containerRef.current?.querySelectorAll("svg")
-            if (!svgEls) return
-            const svgEl = tooltip.side === "left" ? svgEls[0] : svgEls[svgEls.length - 1]
-            if (!svgEl) return
-            const svgRect = svgEl.getBoundingClientRect()
-            el.style.left = `${svgRect.left + tooltip.x + 12}px`
-            el.style.top = `${svgRect.top + tooltip.y - 10}px`
-            el.style.transform = "translate(0, -100%)"
+            left: tooltip.pageX + 14,
+            top: tooltip.pageY - 8,
+            transform: "translateY(-100%)",
           }}
         >
           <div className="font-semibold">
