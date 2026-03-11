@@ -139,7 +139,7 @@ function MonthGrid({
 
   const days = month.daysInMonth
   const range = month.max - month.min
-  const svgH = width // square
+  const svgH = Math.min(width, 280)
   const chartW = width - MARGIN.left - MARGIN.right
   const chartH = svgH - MARGIN.top - MARGIN.bottom
   const cellW = chartW / days
