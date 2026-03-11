@@ -234,34 +234,30 @@ export default function DeviceDetailPage() {
             </div>
 
             <div className="space-y-6">
-              <ConsumptionHeatmap readings={consumptionReadings} unit={unit} />
-
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ConsumptionHeatmap readings={consumptionReadings} unit={unit} />
                 <DailyConsumptionChart data={dailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <MeterBatteryChart unit={unit} readings={readings} />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <HourlyConsumptionChart readings={consumptionReadings} unit={unit} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <BatteryDrainChart readings={readings} />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <RSSIChart readings={readings} />
-                <IMUChart uplinks={uplinks} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <IMUChart uplinks={uplinks} />
                 <AnomalyChart anomalies={anomalies} />
-                {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
-                {deviceType !== "electricity_sml" && <PayloadExplorer uplinks={uplinks} />}
               </div>
 
-              {deviceType === "electricity_sml" && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <PayloadExplorer uplinks={uplinks} />
-                </div>
-              )}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
+                <PayloadExplorer uplinks={uplinks} />
+              </div>
             </div>
           </div>
         )
