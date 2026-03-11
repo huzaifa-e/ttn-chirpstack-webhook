@@ -831,7 +831,7 @@ const stmtUplinkTimestamps = db.prepare(`
   SELECT at FROM uplinks WHERE dev_eui = ? ORDER BY at ASC
 `);
 
-/** Gap detection multiplier – a gap wider than avg_interval * this is an offline break */
+/** Gap detection multiplier – a gap wider than median_interval * this is an offline break */
 const STREAK_GAP_MULTIPLIER = 6;
 
 export function getDeviceSummaries(): DeviceSummary[] {
@@ -846,6 +846,30 @@ export function getDeviceSummaries(): DeviceSummary[] {
       FROM uplinks WHERE dev_eui = ?
     `).get(d.dev_eui) as any;
 
+    // Fetch all uplink timestamps once (used for median interval + streak detection)
+    const timestamps = (stats && stats.cnt > 1)
+      ? stmtUplinkTimestamps.all(d.dev_eui) as Array<{ at: string }>
+      : [];
+
+    // Compute intervals between consecutive uplinks
+    const intervalsMs: number[] = [];
+    for (let i = 1; i < timestamps.length; i++) {
+      const prev = new Date(timestamps[i - 1].at).getTime();
+      const curr = new Date(timestamps[i].at).getTime();
+      intervalsMs.push(curr - prev);
+    }
+
+    // Use median interval (robust against offline gaps inflating the average)
+    let medianIntervalMs: number | null = null;
+    if (intervalsMs.length > 0) {
+      const sorted = [...intervalsMs].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      medianIntervalMs = sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
+    }
+
+    // avg_interval for API consumers (still based on simple average for backwards compat)
     let avgInterval: number | null = null;
     if (stats && stats.cnt > 1 && stats.first_at && stats.last_at) {
       const first = new Date(stats.first_at).getTime();
@@ -857,16 +881,13 @@ export function getDeviceSummaries(): DeviceSummary[] {
     let lastStreakStart: string | null = stats?.first_at ?? null;
     const lastStreakEnd: string | null = stats?.last_at ?? null;
 
-    if (stats && stats.cnt > 1 && avgInterval) {
-      const gapThreshold = avgInterval * STREAK_GAP_MULTIPLIER * 1000; // in ms
-      const timestamps = stmtUplinkTimestamps.all(d.dev_eui) as Array<{ at: string }>;
+    if (medianIntervalMs != null) {
+      const gapThreshold = medianIntervalMs * STREAK_GAP_MULTIPLIER;
 
-      for (let i = 1; i < timestamps.length; i++) {
-        const prev = new Date(timestamps[i - 1].at).getTime();
-        const curr = new Date(timestamps[i].at).getTime();
-        if (curr - prev > gapThreshold) {
-          // Found an offline gap – streak restarts at this uplink
-          lastStreakStart = timestamps[i].at;
+      for (let i = 0; i < intervalsMs.length; i++) {
+        if (intervalsMs[i] > gapThreshold) {
+          // Found an offline gap – streak restarts at the next uplink
+          lastStreakStart = timestamps[i + 1].at;
         }
       }
     }

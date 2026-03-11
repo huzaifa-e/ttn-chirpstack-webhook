@@ -21,6 +21,7 @@ import { RSSIChart } from "@/components/detail/rssi-chart"
 import { IMUChart } from "@/components/detail/imu-chart"
 import { SMLPowerChart } from "@/components/detail/sml-power-chart"
 import { AnomalyChart } from "@/components/detail/anomaly-chart"
+import { ConsumptionHeatmap } from "@/components/detail/consumption-heatmap"
 import { PayloadExplorer } from "@/components/detail/payload-explorer"
 import { LastUplinkPayload } from "@/components/detail/last-uplink-payload"
 import { IntervalDownlinkPanel } from "@/components/detail/interval-downlink-panel"
@@ -237,6 +238,8 @@ export default function DeviceDetailPage() {
                 <DailyConsumptionChart data={dailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
                 <MeterBatteryChart unit={unit} readings={readings} />
               </div>
+
+              <ConsumptionHeatmap readings={consumptionReadings} unit={unit} />
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <HourlyConsumptionChart readings={consumptionReadings} unit={unit} />
