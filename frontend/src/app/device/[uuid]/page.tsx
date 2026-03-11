@@ -239,21 +239,23 @@ export default function DeviceDetailPage() {
                 <MeterBatteryChart unit={unit} readings={readings} />
               </div>
 
-              <ConsumptionHeatmap readings={consumptionReadings} unit={unit} />
-
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ConsumptionHeatmap readings={consumptionReadings} unit={unit} />
                 <HourlyConsumptionChart readings={consumptionReadings} unit={unit} />
-                <BatteryDrainChart readings={readings} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <BatteryDrainChart readings={readings} />
                 <RSSIChart readings={readings} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <IMUChart uplinks={uplinks} />
+                <AnomalyChart anomalies={anomalies} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
-                <AnomalyChart anomalies={anomalies} />
                 {deviceType !== "electricity_sml" && <PayloadExplorer uplinks={uplinks} />}
               </div>
 
