@@ -909,12 +909,15 @@ export function getDeviceSummaries(): DeviceSummary[] {
         : sorted[mid];
     }
 
-    // avg_interval for API consumers (still based on simple average for backwards compat)
+    // avg_interval based on the last 3 uplinks
     let avgInterval: number | null = null;
-    if (stats && stats.cnt > 1 && stats.first_at && stats.last_at) {
-      const first = new Date(stats.first_at).getTime();
-      const last = new Date(stats.last_at).getTime();
-      avgInterval = Math.round((last - first) / (stats.cnt - 1) / 1000);
+    if (timestamps.length >= 2) {
+      const recent = timestamps.slice(-3);
+      let sum = 0;
+      for (let i = 1; i < recent.length; i++) {
+        sum += new Date(recent[i].at).getTime() - new Date(recent[i - 1].at).getTime();
+      }
+      avgInterval = Math.round(sum / (recent.length - 1) / 1000);
     }
 
     // Detect the last continuous streak by scanning for offline gaps
