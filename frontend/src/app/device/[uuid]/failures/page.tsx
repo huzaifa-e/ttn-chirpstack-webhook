@@ -6,7 +6,7 @@ import { useParams } from "next/navigation"
 import { ArrowLeft, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react"
 
 import { BackgroundPlus } from "@/demos/background-plus"
-import { getDeviceSummaries, getUplinks, getConfiguredDevice } from "@/lib/api"
+import { getDeviceSummaries, getUplinks, getConfiguredDevice, getFailureLogsResetAt } from "@/lib/api"
 import { analyzeUplinkFailures, type UploadFailureLog } from "@/lib/failure-analysis"
 import { DEFAULT_DAYS } from "@/lib/constants"
 
@@ -153,9 +153,10 @@ export default function DeviceFailuresPage() {
         const from = new Date(now.getTime() - DEFAULT_DAYS * 24 * 60 * 60 * 1000).toISOString()
         const to = now.toISOString()
 
-        const [summaries, uplinks] = await Promise.all([
+        const [summaries, uplinks, resetAt] = await Promise.all([
           getDeviceSummaries(),
           getUplinks(deviceUuid, from, to, 5000),
+          getFailureLogsResetAt(deviceUuid),
         ])
 
         if (cancelled) return
@@ -163,7 +164,10 @@ export default function DeviceFailuresPage() {
         const summary = summaries.find((s) => s.dev_eui === devEui) ?? null
         const analysis = analyzeUplinkFailures(uplinks, summary?.avg_interval_seconds ?? null)
         setExpectedIntervalSec(analysis.expectedIntervalSec)
-        setLogs(analysis.failures.slice().reverse())
+        const filtered = resetAt
+          ? analysis.failures.filter((f) => f.at > resetAt)
+          : analysis.failures
+        setLogs(filtered.slice().reverse())
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load failure logs")
       } finally {

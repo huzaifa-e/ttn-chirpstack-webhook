@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Trash2, Hash } from "lucide-react"
+import { Trash2, Hash, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
-import { getTxCount, deleteDataPoint, deleteDataRange } from "@/lib/api"
+import { getTxCount, deleteDataPoint, deleteDataRange, resetUplinkCount, resetFailureLogs } from "@/lib/api"
 import type { DeleteSource } from "@/lib/types"
 
 export function DataManagement({ devEui, onDataChanged }: { devEui: string; onDataChanged?: () => void }) {
@@ -125,6 +125,45 @@ export function DataManagement({ devEui, onDataChanged }: { devEui: string; onDa
           <Trash2 size={12} />
           Löschen
         </button>
+      </div>
+
+      {/* Reset actions */}
+      <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-700/50 space-y-2">
+        <label className="text-[10px] text-zinc-500 block">Zurücksetzen</label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={async () => {
+              if (!confirm("Uplink-Zähler zurücksetzen? Der Zähler startet ab jetzt bei 0. Keine Daten werden gelöscht.")) return
+              try {
+                await resetUplinkCount(devEui)
+                toast.success("Uplink-Zähler zurückgesetzt")
+                onDataChanged?.()
+              } catch (err) {
+                toast.error("Fehler", { description: String(err) })
+              }
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+          >
+            <RotateCcw size={12} />
+            Uplink-Zähler zurücksetzen
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm("Failure-Logs zurücksetzen? Bestehende Fehlereinträge werden ausgeblendet.")) return
+              try {
+                await resetFailureLogs(devEui)
+                toast.success("Failure-Logs zurückgesetzt")
+                onDataChanged?.()
+              } catch (err) {
+                toast.error("Fehler", { description: String(err) })
+              }
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+          >
+            <RotateCcw size={12} />
+            Failure-Logs zurücksetzen
+          </button>
+        </div>
       </div>
     </div>
   )

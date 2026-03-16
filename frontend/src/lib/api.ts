@@ -197,6 +197,36 @@ export async function deleteDataRange(
   return fetchJSON(`/api/data-range?${params}`, { method: "DELETE" })
 }
 
+export async function resetUplinkCount(devEuiOrUuid: string): Promise<{ ok: boolean }> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
+  return fetchJSON(`/api/reset-uplink-count?${params}`, { method: "POST" })
+}
+
+export async function getUplinkCountResetAt(devEuiOrUuid: string): Promise<string | null> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
+  const data = await fetchJSON<{ resetAt: string | null }>(`/api/uplink-count-reset-at?${params}`)
+  return data.resetAt
+}
+
+export async function resetFailureLogs(devEuiOrUuid: string): Promise<{ ok: boolean }> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
+  return fetchJSON(`/api/reset-failure-logs?${params}`, { method: "POST" })
+}
+
+export async function getFailureLogsResetAt(devEuiOrUuid: string): Promise<string | null> {
+  const params = new URLSearchParams()
+  if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)
+  else params.set("devEui", devEuiOrUuid)
+  const data = await fetchJSON<{ resetAt: string | null }>(`/api/failure-logs-reset-at?${params}`)
+  return data.resetAt
+}
+
 export function getExportUrl(devEuiOrUuid: string, format: "json" | "csv", from?: string, to?: string): string {
   const params = new URLSearchParams({ format })
   if (isUUID(devEuiOrUuid)) params.set("uuid", devEuiOrUuid)

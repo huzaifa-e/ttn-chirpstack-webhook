@@ -39,6 +39,7 @@ import {
   getAnomalies,
   getConfiguredDevice,
   createConfiguredDevice,
+  getFailureLogsResetAt,
 } from "@/lib/api"
 import { useSSE } from "@/lib/use-sse"
 import { getDeviceStatus } from "@/lib/formatters"
@@ -63,6 +64,7 @@ export default function DeviceDetailPage() {
   const [lastUplink, setLastUplink] = useState<Uplink | null>(null)
   const [dailyData, setDailyData] = useState<DailyConsumption[]>([])
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
+  const [failureResetAt, setFailureResetAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -92,7 +94,7 @@ export default function DeviceDetailPage() {
       const fromConsumption = new Date(now.getTime() - CONSUMPTION_DAYS * 24 * 60 * 60 * 1000).toISOString()
       const to = now.toISOString()
 
-      const [summaries, readingsData, consumptionReadingsData, uplinksData, lastUp, daily, anomalyData] = await Promise.all([
+      const [summaries, readingsData, consumptionReadingsData, uplinksData, lastUp, daily, anomalyData, resetAt] = await Promise.all([
         getDeviceSummaries(),
         getReadings(deviceUuid, from, to),
         getReadings(deviceUuid, fromConsumption, to),
@@ -100,6 +102,7 @@ export default function DeviceDetailPage() {
         getLastUplink(deviceUuid),
         getDailyConsumption(deviceUuid, CONSUMPTION_HISTORY_DAYS, timezone),
         getAnomalies(deviceUuid),
+        getFailureLogsResetAt(deviceUuid),
       ])
 
       const dev = summaries.find((d) => d.dev_eui === devEui || d.uuid === deviceUuid) || null
@@ -110,6 +113,7 @@ export default function DeviceDetailPage() {
       setLastUplink(lastUp)
       setDailyData(daily.series)
       setAnomalies(anomalyData)
+      setFailureResetAt(resetAt)
     } catch (err) {
       toast.error("Fehler beim Laden der Daten")
       console.error(err)
@@ -143,10 +147,16 @@ export default function DeviceDetailPage() {
   const { connected } = useSSE(handleSSE)
 
   const unit = DEVICE_TYPE_CONFIG[deviceType].unit
-  const failureAnalysis = useMemo(
-    () => analyzeUplinkFailures(uplinks, device?.avg_interval_seconds ?? null),
-    [uplinks, device?.avg_interval_seconds],
-  )
+  const failureAnalysis = useMemo(() => {
+    const analysis = analyzeUplinkFailures(uplinks, device?.avg_interval_seconds ?? null)
+    if (failureResetAt) {
+      return {
+        ...analysis,
+        failures: analysis.failures.filter((f) => f.at > failureResetAt),
+      }
+    }
+    return analysis
+  }, [uplinks, device?.avg_interval_seconds, failureResetAt])
 
   // Register controls into the shared sidebar context
   useSetDeviceControls(useMemo(() => ({

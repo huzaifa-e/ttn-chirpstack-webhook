@@ -32,6 +32,10 @@ import {
   createConfiguredDevice,
   updateConfiguredDevice,
   deleteConfiguredDevice,
+  resetUplinkCount,
+  getUplinkCountResetAt,
+  resetFailureLogs,
+  getFailureLogsResetAt,
 } from "./db.js";
 
 dotenv.config();
@@ -1082,6 +1086,38 @@ app.delete("/api/data-range", (req, res) => {
 
   const deleted = deleteDataRange(devEui, from, to, source);
   return res.json({ devEui, from, to, source, ...deleted });
+});
+
+app.post("/api/reset-uplink-count", (req, res) => {
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
+
+  resetUplinkCount(devEui);
+  return res.json({ devEui, ok: true });
+});
+
+app.get("/api/uplink-count-reset-at", (req, res) => {
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
+
+  const resetAt = getUplinkCountResetAt(devEui);
+  return res.json({ devEui, resetAt });
+});
+
+app.post("/api/reset-failure-logs", (req, res) => {
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
+
+  resetFailureLogs(devEui);
+  return res.json({ devEui, ok: true });
+});
+
+app.get("/api/failure-logs-reset-at", (req, res) => {
+  const devEui = resolveDevEui(req.query as Record<string, unknown>) || "";
+  if (!devEui) return res.status(400).json({ error: "devEui or uuid is required" });
+
+  const resetAt = getFailureLogsResetAt(devEui);
+  return res.json({ devEui, resetAt });
 });
 
 app.get("/api/export", (req, res) => {

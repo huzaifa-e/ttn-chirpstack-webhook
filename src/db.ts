@@ -85,6 +85,8 @@ function ensureDeviceSettingsColumns(): void {
   add("auto_recalibrate_cooldown_min", "INTEGER NOT NULL DEFAULT 180");
   add("auto_recalibrate_f_port", "INTEGER NOT NULL DEFAULT 15");
   add("last_auto_recalibrated_at", "TEXT");
+  add("failure_logs_reset_at", "TEXT");
+  add("uplink_count_reset_at", "TEXT");
 }
 ensureDeviceSettingsColumns();
 
@@ -767,6 +769,38 @@ export function deleteDevice(devEui: string): { readingsDeleted: number; uplinks
   };
 }
 
+export function resetUplinkCount(devEui: string): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO device_settings (dev_eui, uplink_count_reset_at, updated_at)
+    VALUES (@dev_eui, @reset_at, @updated_at)
+    ON CONFLICT(dev_eui) DO UPDATE SET
+      uplink_count_reset_at = excluded.uplink_count_reset_at,
+      updated_at = excluded.updated_at
+  `).run({ dev_eui: devEui, reset_at: now, updated_at: now });
+}
+
+export function getUplinkCountResetAt(devEui: string): string | null {
+  const row = db.prepare(`SELECT uplink_count_reset_at FROM device_settings WHERE dev_eui = ?`).get(devEui) as { uplink_count_reset_at: string | null } | undefined;
+  return row?.uplink_count_reset_at ?? null;
+}
+
+export function resetFailureLogs(devEui: string): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO device_settings (dev_eui, failure_logs_reset_at, updated_at)
+    VALUES (@dev_eui, @reset_at, @updated_at)
+    ON CONFLICT(dev_eui) DO UPDATE SET
+      failure_logs_reset_at = excluded.failure_logs_reset_at,
+      updated_at = excluded.updated_at
+  `).run({ dev_eui: devEui, reset_at: now, updated_at: now });
+}
+
+export function getFailureLogsResetAt(devEui: string): string | null {
+  const row = db.prepare(`SELECT failure_logs_reset_at FROM device_settings WHERE dev_eui = ?`).get(devEui) as { failure_logs_reset_at: string | null } | undefined;
+  return row?.failure_logs_reset_at ?? null;
+}
+
 export function exportDeviceData(devEui: string, from?: string, to?: string): { readings: ReadingRow[]; uplinks: UplinkRow[] } {
   const readings = listReadings(devEui, from, to);
   const uplinks = listUplinks(devEui, from, to, 100000);
@@ -841,10 +875,16 @@ export function getDeviceSummaries(): DeviceSummary[] {
   for (const d of devices) {
     const lastUp = stmtLastUplink.get(d.dev_eui) as UplinkRow | undefined;
     const lastRead = stmtLastReading.get(d.dev_eui) as any | undefined;
-    const stats = db.prepare(`
-      SELECT COUNT(*) AS cnt, MIN(at) AS first_at, MAX(at) AS last_at
-      FROM uplinks WHERE dev_eui = ?
-    `).get(d.dev_eui) as any;
+    const uplinkResetAt = getUplinkCountResetAt(d.dev_eui);
+    const stats = uplinkResetAt
+      ? db.prepare(`
+          SELECT COUNT(*) AS cnt, MIN(at) AS first_at, MAX(at) AS last_at
+          FROM uplinks WHERE dev_eui = ? AND at > ?
+        `).get(d.dev_eui, uplinkResetAt) as any
+      : db.prepare(`
+          SELECT COUNT(*) AS cnt, MIN(at) AS first_at, MAX(at) AS last_at
+          FROM uplinks WHERE dev_eui = ?
+        `).get(d.dev_eui) as any;
 
     // Fetch all uplink timestamps once (used for median interval + streak detection)
     const timestamps = (stats && stats.cnt > 1)
