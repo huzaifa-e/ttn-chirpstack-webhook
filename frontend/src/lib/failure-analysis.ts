@@ -34,6 +34,9 @@ export interface UploadFailureLog {
   previousMeterValueRaw: string | null
   currentMeterValue: number | null
   currentMeterValueRaw: string | null
+  previousBatteryMv: number | null
+  currentBatteryMv: number | null
+  failureReason: string
   payload: Record<string, unknown> | null
 }
 
@@ -222,6 +225,137 @@ const ERROR_BITMASK_CODES: BitmaskDef[] = [
 
 const FAILURE_OVERDUE_THRESHOLD_SEC = 40
 
+/**
+ * Strips a raw meter string to a zero-padded digit-only form (no comma/dot).
+ * e.g. "22488,930" → "22488930", "22489.160" → "22489160"
+ */
+function rawToDigits(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const s = String(raw).replace(/[,.\s]/g, "")
+  if (!/^\d+$/.test(s)) return null
+  return s
+}
+
+/**
+ * Diagnose _why_ the uplink was delayed based on the OCR device validation rules.
+ *
+ * Rules (from IC_ocr.cpp):
+ *  1. ROLLOVER FIX  — ≥3 trailing digits changed AND an old digit was 8/9
+ *     with a new digit of 0 → device applied rollover correction & retried
+ *  2. OVERLIMIT     — increase (new − old) exceeded max_increase_allowed
+ *  3. ROLLBACK      — new value < old value (string compare), device retried
+ *  4. OCR FAILURE   — raw value contains 'X' or is missing
+ *  5. DEVICE ERROR  — error event hex codes present
+ */
+function diagnoseFailureReason(
+  prevRaw: string | null | undefined,
+  curRaw: string | null | undefined,
+  prevValue: number | null | undefined,
+  curValue: number | null | undefined,
+  errorHex: string | null,
+  warningHex: string | null,
+  exceededBySec: number,
+  expectedIntervalSec: number,
+): string {
+  const reasons: string[] = []
+
+  // Check OCR failure (null values or X in raw)
+  if (curRaw == null || curValue == null) {
+    reasons.push("OCR failure: device could not produce a valid reading")
+  } else if (typeof curRaw === "string" && /x/i.test(curRaw)) {
+    reasons.push("OCR failure: raw value contains unrecognised digits ('X')")
+  }
+
+  const oldDigits = rawToDigits(prevRaw ?? undefined)
+  const newDigits = rawToDigits(curRaw ?? undefined)
+
+  if (oldDigits && newDigits && oldDigits.length === newDigits.length) {
+    const n = oldDigits.length
+
+    // Count consecutive trailing positions that differ (same logic as IC_ocr.cpp)
+    let tail = 0
+    for (let p = n - 1; p >= 0; --p) {
+      if (newDigits[p] !== oldDigits[p]) tail++
+      else break
+    }
+
+    const carryPos = n - tail
+
+    // Check for 8/9 → 0 artifact in the changed tail (rollover signature)
+    let has8or9Artifact = false
+    if (tail >= 3) {
+      for (let p = carryPos; p < n; p++) {
+        if ((oldDigits[p] === "8" || oldDigits[p] === "9") && newDigits[p] === "0") {
+          has8or9Artifact = true
+          break
+        }
+      }
+      // Also check if carry digit was 8→9 or 9→0
+      const carryIs8or9 = carryPos < n &&
+        (oldDigits[carryPos] === "8" || oldDigits[carryPos] === "9")
+
+      if (has8or9Artifact && carryIs8or9) {
+        reasons.push(
+          `Stuck in rollover fix: ${tail} trailing digits changed ` +
+          `(carry pos ${carryPos}: '${oldDigits[carryPos]}'→'${newDigits[carryPos]}') — ` +
+          `device detected mechanical rollover and retried OCR`,
+        )
+      } else if (has8or9Artifact) {
+        reasons.push(
+          `Possible rollover: ${tail} trailing digits changed with 8/9→0 artifact`,
+        )
+      }
+    }
+
+    // Check ROLLBACK (new < old by string compare)
+    if (newDigits < oldDigits && !reasons.some((r) => r.includes("rollover"))) {
+      reasons.push(
+        `Rollback path: reading decreased (old: ${oldDigits}, new: ${newDigits}) — ` +
+        `device retried validation`,
+      )
+    }
+
+    // Check OVERLIMIT — rough estimate using Qmax=6 m³/h and actual interval
+    // max_increase_allowed = (1000/scalar) * (qmax * (interval/3600))
+    // We estimate scalar from decimal places in raw value
+    if (prevValue != null && curValue != null && curValue > prevValue) {
+      const actualSec = expectedIntervalSec + exceededBySec
+      // Conservative Qmax = 6 m³/h, estimate with 1 decimal (scalar=10)
+      const maxIncreaseEstimate = 6 * (actualSec / 3600)
+      const diff = curValue - prevValue
+      if (diff > maxIncreaseEstimate * 1.5) {
+        reasons.push(
+          `Possible overlimit: Δ=${diff.toFixed(3)} m³ exceeds estimated max ` +
+          `(~${maxIncreaseEstimate.toFixed(1)} m³ for ${actualSec}s at Qmax=6 m³/h)`,
+        )
+      }
+    }
+  }
+
+  // Check device error codes
+  if (errorHex && !/^0+$/.test(errorHex)) {
+    const decoded = decodeEventBySeverity(errorHex, "ERROR")
+    if (decoded) {
+      reasons.push(`Device error: ${decoded.name} — ${decoded.description}`)
+    }
+  }
+  if (warningHex && !/^0+$/.test(warningHex)) {
+    const decoded = decodeEventBySeverity(warningHex, "WARN")
+    if (decoded) {
+      reasons.push(`Device warning: ${decoded.name} — ${decoded.description}`)
+    }
+  }
+
+  if (reasons.length === 0) {
+    // Fall back: just note the raw values for manual inspection
+    const lastStr = prevRaw ? `last raw: ${prevRaw}` : "last: n/a"
+    const newStr = curRaw ? `new raw: ${curRaw}` : "new: n/a"
+    return `Took longer than expected (${lastStr}, ${newStr}) — cause unknown`
+  }
+
+  return reasons.join("; ")
+}
+
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null
   return v as Record<string, unknown>
@@ -354,6 +488,17 @@ export function analyzeUplinkFailures(uplinks: Uplink[], expectedIntervalSecInpu
     const warningEventHex = getHexFromUplink(current, "warning_event_hex")
     const infoEventHex = getHexFromUplink(current, "info_event_hex")
 
+    const failureReason = diagnoseFailureReason(
+      prev.meter_value_raw,
+      current.meter_value_raw,
+      prev.meter_value,
+      current.meter_value,
+      errorEventHex,
+      warningEventHex,
+      exceededBySec,
+      expectedIntervalSec,
+    )
+
     failures.push({
       id: `${current.id}-${current.at}`,
       devEui: current.dev_eui,
@@ -373,6 +518,9 @@ export function analyzeUplinkFailures(uplinks: Uplink[], expectedIntervalSecInpu
       previousMeterValueRaw: prev.meter_value_raw,
       currentMeterValue: current.meter_value,
       currentMeterValueRaw: current.meter_value_raw,
+      previousBatteryMv: prev.battery_mv,
+      currentBatteryMv: current.battery_mv,
+      failureReason,
       payload: asRecord(current.decoded_json) ?? asRecord(current.payload_json),
     })
   }

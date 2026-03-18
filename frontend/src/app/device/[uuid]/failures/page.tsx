@@ -47,6 +47,10 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
           </div>
         </div>
 
+        <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-md px-2.5 py-1.5">
+          {log.failureReason}
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
           <div className="text-zinc-500">Erwartet: <span className="text-zinc-700 dark:text-zinc-300">{formatSec(log.expectedIntervalSec)}</span></div>
           <div className="text-zinc-500">Ist: <span className="text-zinc-700 dark:text-zinc-300">{formatSec(log.actualIntervalSec)}</span></div>
@@ -58,6 +62,7 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
           <HexChip label="ERR" value={log.errorEventHex} />
           <HexChip label="WARN" value={log.warningEventHex} />
           <HexChip label="INFO" value={log.infoEventHex} />
+          <HexChip label="BAT" value={log.currentBatteryMv != null ? `${log.currentBatteryMv} mV` : null} />
         </div>
       </button>
 
@@ -93,6 +98,7 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
               {log.previousMeterValueRaw && (
                 <div className="text-zinc-500 mt-1">raw: {log.previousMeterValueRaw}</div>
               )}
+              <div className="text-zinc-500 mt-1">battery: {log.previousBatteryMv != null ? `${log.previousBatteryMv} mV` : "—"}</div>
             </div>
             <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
               <div className="text-[11px] uppercase text-zinc-500 mb-1">Current Meter Reading (this uplink)</div>
@@ -100,6 +106,7 @@ function FailureRow({ log }: { log: UploadFailureLog }) {
               {log.currentMeterValueRaw && (
                 <div className="text-zinc-500 mt-1">raw: {log.currentMeterValueRaw}</div>
               )}
+              <div className="text-zinc-500 mt-1">battery: {log.currentBatteryMv != null ? `${log.currentBatteryMv} mV` : "—"}</div>
             </div>
           </div>
 
