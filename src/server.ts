@@ -283,13 +283,20 @@ function parseLoRaPayload(up: any) {
     ]) ?? new Date().toISOString()
   );
 
-  const deduplicationId =
+  const dedupRaw =
     (firstDefined(up, [
       ["deduplicationId"],
       ["deduplication_id"],
       ["uplink_message", "f_cnt"],
       ["f_cnt"],
     ]) ?? null) as string | number | null;
+
+  // f_cnt resets when a device restarts/rejoins, so combine it with the
+  // timestamp to avoid falsely deduplicating new uplinks against old ones.
+  // True duplicates (same uplink via multiple gateways) share both f_cnt AND
+  // receive time, so they will still be deduplicated correctly.
+  const deduplicationId =
+    dedupRaw != null ? `${dedupRaw}:${at}` : null;
 
   const rxCandidates =
     (Array.isArray(up?.rxInfo) ? up.rxInfo : []).concat(
