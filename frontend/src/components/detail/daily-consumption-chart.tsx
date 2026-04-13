@@ -247,7 +247,7 @@ export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365, inhou
       onDoubleClick={zoom.onDoubleClick}
     >
       <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={zoom.zoomedData} {...zoom.chartProps}>
+        <ComposedChart data={zoom.zoomedData} barGap={hasInhouse ? -18 : 4} barCategoryGap={hasInhouse ? "0%" : "10%"} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="period" tick={{ fontSize: 10 }} className="text-zinc-400" />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} className="text-zinc-400" label={{ value: unit, angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
@@ -259,9 +259,9 @@ export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365, inhou
             }}
           />
           {(hasSimulated || hasInhouse) && <Legend wrapperStyle={{ fontSize: 11 }} />}
-          <Bar dataKey="consumption" name={`${modeLabel}-Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <Bar dataKey="consumption" name={`${modeLabel}-Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={18} isAnimationActive={false} />
           {hasInhouse && (
-            <Bar dataKey="inhouse" name={`${modeLabel}-Inhouse Verbrauch (${unit})`} fill="#0ea5e9" radius={[4, 4, 0, 0]} isAnimationActive={false} fillOpacity={0.85} />
+            <Bar dataKey="inhouse" name={`${modeLabel}-Inhouse Verbrauch (${unit})`} fill="#f97316" radius={[4, 4, 0, 0]} barSize={18} isAnimationActive={false} fillOpacity={0.75} />
           )}
           {hasSimulated && (
             <Bar dataKey="simulated" name={`Prognose / SLP (${unit})`} fill="#f59e0b" radius={[4, 4, 0, 0]} isAnimationActive={false} fillOpacity={0.7} />
