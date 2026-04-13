@@ -159,35 +159,6 @@ export default function DeviceDetailPage() {
     return analysis
   }, [uplinks, device?.avg_interval_seconds, failureResetAt])
 
-  // Register controls into the shared sidebar context
-  useSetDeviceControls(useMemo(() => ({
-    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui, deviceUuid, activeSection, setActiveSection,
-  }), [days, timezone, refreshing, fetchData, lastUplink, devEui, deviceUuid, activeSection]))
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-          <p className="text-zinc-600 dark:text-zinc-300">Gerätedaten werden geladen...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!device) {
-    return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-zinc-500 mb-4">Gerät nicht gefunden: {deviceUuid}</p>
-          <Link href="/" className="text-blue-500 hover:underline text-sm inline-flex items-center gap-1"><ArrowLeft size={14} /> Zurück zur Übersicht</Link>
-        </div>
-      </div>
-    )
-  }
-
-  const status = getDeviceStatus(device)
-
   const inhouseDailyData = useMemo<DailyConsumption[]>(() => {
     if (deviceType !== "electricity_sml" || !uplinks.length) return []
 
@@ -239,6 +210,35 @@ export default function DeviceDetailPage() {
         closing: values.last,
       }))
   }, [deviceType, uplinks, timezone])
+
+  // Register controls into the shared sidebar context
+  useSetDeviceControls(useMemo(() => ({
+    days, setDays, timezone, setTimezone, refreshing, fetchData, lastUplink, devEui, deviceUuid, activeSection, setActiveSection,
+  }), [days, timezone, refreshing, fetchData, lastUplink, devEui, deviceUuid, activeSection]))
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+          <p className="text-zinc-600 dark:text-zinc-300">Gerätedaten werden geladen...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!device) {
+    return (
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-zinc-500 mb-4">Gerät nicht gefunden: {deviceUuid}</p>
+          <Link href="/" className="text-blue-500 hover:underline text-sm inline-flex items-center gap-1"><ArrowLeft size={14} /> Zurück zur Übersicht</Link>
+        </div>
+      </div>
+    )
+  }
+
+  const status = getDeviceStatus(device)
 
   const renderSection = () => {
     switch (activeSection) {
