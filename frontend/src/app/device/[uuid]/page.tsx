@@ -20,6 +20,7 @@ import { BatteryDrainChart } from "@/components/detail/battery-drain-chart"
 import { RSSIChart } from "@/components/detail/rssi-chart"
 import { IMUChart } from "@/components/detail/imu-chart"
 import { SMLPowerChart } from "@/components/detail/sml-power-chart"
+import { InhouseConsumptionChart } from "@/components/detail/inhouse-consumption-chart"
 import { AnomalyChart } from "@/components/detail/anomaly-chart"
 import { ConsumptionHeatmap } from "@/components/detail/consumption-heatmap"
 import { PayloadExplorer } from "@/components/detail/payload-explorer"
@@ -266,6 +267,7 @@ export default function DeviceDetailPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {deviceType === "electricity_sml" && <SMLPowerChart uplinks={uplinks} />}
+                {deviceType === "electricity_sml" && <InhouseConsumptionChart uplinks={uplinks} />}
                 <PayloadExplorer uplinks={uplinks} />
               </div>
             </div>
