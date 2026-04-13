@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea, ReferenceLine } from "recharts"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceArea, ReferenceLine } from "recharts"
 import type { Uplink } from "@/lib/types"
 import { formatChartNumber } from "@/lib/formatters"
 import { ChartWrapper, ChartEmpty } from "./daily-consumption-chart"
@@ -50,12 +50,12 @@ export function InhouseConsumptionChart({ uplinks }: { uplinks: Uplink[] }) {
   return (
     <ChartWrapper label="Inhouse Verbrauch (OBIS 3.8.0)" isZoomed={zoom.isZoomed} onReset={zoom.resetZoom} containerRef={zoom.containerRef} isDragging={zoom.isDragging} onDoubleClick={zoom.onDoubleClick}>
       <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={zoom.zoomedData} {...zoom.chartProps}>
+        <BarChart data={zoom.zoomedData} {...zoom.chartProps}>
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="time" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} label={{ value: "kWh", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
           <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value: number | string | undefined, name: string | number | undefined) => [formatChartNumber(value), String(name)]} />
-          <Line dataKey="inhouse" name="Inhouse Verbrauch (kWh)" stroke="#0ea5e9" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Bar dataKey="inhouse" name="Inhouse Verbrauch (kWh)" fill="#0ea5e9" radius={[3, 3, 0, 0]} isAnimationActive={false} />
           {zoom.refAreaLeft && zoom.refAreaRight && (
             <>
               <ReferenceArea x1={zoom.refAreaLeft} x2={zoom.refAreaRight} stroke="#0ea5e9" strokeWidth={1.5} strokeOpacity={0.6} fill="#0ea5e9" fillOpacity={0.2} />
@@ -63,7 +63,7 @@ export function InhouseConsumptionChart({ uplinks }: { uplinks: Uplink[] }) {
               <ReferenceLine x={zoom.refAreaRight} stroke="#0ea5e9" strokeWidth={1.5} strokeDasharray="4 2" />
             </>
           )}
-        </LineChart>
+        </BarChart>
       </ResponsiveContainer>
     </ChartWrapper>
   )
