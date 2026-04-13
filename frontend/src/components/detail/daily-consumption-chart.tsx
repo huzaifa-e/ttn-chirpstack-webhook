@@ -139,10 +139,10 @@ function fillMissingMonths(
       const key = `${y}-${String(m).padStart(2, "0")}`
       const actual = actualMap.get(key)
       if (actual !== undefined) {
-        result.push({ period: key, consumption: actual, simulated: null })
+        result.push({ period: key, consumption: actual, simulated: null, inhouse: null })
       } else {
         const sim = estimatedAnnualForYear * (monthWeights[m] ?? GAS_SLP_WEIGHTS[m] ?? (1 / 12))
-        result.push({ period: key, consumption: null, simulated: Math.round(sim * 100) / 100 })
+        result.push({ period: key, consumption: null, simulated: Math.round(sim * 100) / 100, inhouse: null })
       }
     }
   }
