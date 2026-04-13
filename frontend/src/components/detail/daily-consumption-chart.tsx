@@ -35,6 +35,7 @@ interface ConsumptionPoint {
   period: string
   consumption: number | null
   simulated: number | null
+  inhouse: number | null
 }
 
 function buildHistoricalMonthWeights(actualMap: Map<string, number>): Record<number, number> {
@@ -148,16 +149,37 @@ function fillMissingMonths(
   return result
 }
 
-export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365 }: { data: DailyConsumption[]; unit: string; dailyWindowDays?: number }) {
+export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365, inhouseData = [] }: { data: DailyConsumption[]; unit: string; dailyWindowDays?: number; inhouseData?: DailyConsumption[] }) {
   const [mode, setMode] = useState<"daily" | "monthly" | "yearly">("daily")
 
   const chartData = useMemo((): ConsumptionPoint[] => {
+    const inhouseMap = new Map<string, number>()
+
+    if (mode === "daily") {
+      for (const d of inhouseData) {
+        if (d.consumption == null) continue
+        inhouseMap.set(d.date, d.consumption)
+      }
+    } else if (mode === "yearly") {
+      for (const d of inhouseData) {
+        if (d.consumption == null) continue
+        const key = d.date.slice(0, 4)
+        inhouseMap.set(key, (inhouseMap.get(key) ?? 0) + d.consumption)
+      }
+    } else {
+      for (const d of inhouseData) {
+        if (d.consumption == null) continue
+        const key = d.date.slice(0, 7)
+        inhouseMap.set(key, (inhouseMap.get(key) ?? 0) + d.consumption)
+      }
+    }
+
     if (mode === "daily") {
       return data
         .filter((d) => d.consumption != null)
         .sort((a, b) => a.date.localeCompare(b.date))
         .slice(-dailyWindowDays)
-        .map((d) => ({ period: d.date, consumption: d.consumption, simulated: null }))
+        .map((d) => ({ period: d.date, consumption: d.consumption, simulated: null, inhouse: inhouseMap.get(d.date) ?? null }))
     }
 
     if (mode === "yearly") {
@@ -169,7 +191,7 @@ export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365 }: { d
       }
       return Array.from(map.entries())
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([period, consumption]) => ({ period, consumption, simulated: null }))
+        .map(([period, consumption]) => ({ period, consumption, simulated: null, inhouse: inhouseMap.get(period) ?? null }))
     }
 
     // Monthly: aggregate actual data, then fill gaps with SLP simulation
@@ -180,14 +202,18 @@ export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365 }: { d
       actualMap.set(key, (actualMap.get(key) ?? 0) + d.consumption)
     }
 
-    return fillMissingMonths(actualMap)
-  }, [data, mode, dailyWindowDays])
+    return fillMissingMonths(actualMap).map((point) => ({
+      ...point,
+      inhouse: inhouseMap.get(point.period) ?? null,
+    }))
+  }, [data, mode, dailyWindowDays, inhouseData])
 
   const zoom = useChartZoom(chartData, "period")
   if (!data.length) return <ChartEmpty label="Tagesverbrauch" />
 
   const modeLabel = mode === "daily" ? "Tag" : mode === "monthly" ? "Monat" : "Jahr"
   const hasSimulated = mode === "monthly" && chartData.some((d) => d.simulated != null)
+  const hasInhouse = chartData.some((d) => d.inhouse != null)
 
   return (
     <ChartWrapper
@@ -232,8 +258,11 @@ export function DailyConsumptionChart({ data, unit, dailyWindowDays = 365 }: { d
               return [label, String(name)]
             }}
           />
-          {hasSimulated && <Legend wrapperStyle={{ fontSize: 11 }} />}
+          {(hasSimulated || hasInhouse) && <Legend wrapperStyle={{ fontSize: 11 }} />}
           <Bar dataKey="consumption" name={`${modeLabel}-Verbrauch (${unit})`} fill="#3b82f6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          {hasInhouse && (
+            <Bar dataKey="inhouse" name={`${modeLabel}-Inhouse Verbrauch (${unit})`} fill="#0ea5e9" radius={[4, 4, 0, 0]} isAnimationActive={false} fillOpacity={0.85} />
+          )}
           {hasSimulated && (
             <Bar dataKey="simulated" name={`Prognose / SLP (${unit})`} fill="#f59e0b" radius={[4, 4, 0, 0]} isAnimationActive={false} fillOpacity={0.7} />
           )}

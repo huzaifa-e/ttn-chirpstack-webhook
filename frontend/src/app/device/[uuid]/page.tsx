@@ -188,6 +188,58 @@ export default function DeviceDetailPage() {
 
   const status = getDeviceStatus(device)
 
+  const inhouseDailyData = useMemo<DailyConsumption[]>(() => {
+    if (deviceType !== "electricity_sml" || !uplinks.length) return []
+
+    const toNumber = (value: unknown): number | null => {
+      if (typeof value === "number") return Number.isFinite(value) ? value : null
+      if (typeof value === "string") {
+        const parsed = Number(value.trim().replace(",", "."))
+        return Number.isFinite(parsed) ? parsed : null
+      }
+      return null
+    }
+
+    const dayKey = (iso: string): string => {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(new Date(iso))
+      const year = parts.find((p) => p.type === "year")?.value ?? "0000"
+      const month = parts.find((p) => p.type === "month")?.value ?? "01"
+      const day = parts.find((p) => p.type === "day")?.value ?? "01"
+      return `${year}-${month}-${day}`
+    }
+
+    const buckets = new Map<string, { first: number; last: number }>()
+
+    for (const u of [...uplinks].sort((a, b) => a.at.localeCompare(b.at))) {
+      const d = (u.decoded_json || u.payload_json) as Record<string, unknown> | null
+      if (!d) continue
+
+      const val = toNumber(d["3.8.0"] ?? d["obis_3_8_0"] ?? d["obis3_8_0"])
+      if (val == null) continue
+
+      const key = dayKey(u.at)
+      const existing = buckets.get(key)
+      if (existing) {
+        existing.last = val
+      } else {
+        buckets.set(key, { first: val, last: val })
+      }
+    }
+
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, values]) => ({
+        date,
+        consumption: Math.max(0, values.last - values.first),
+        closing: values.last,
+      }))
+  }, [deviceType, uplinks, timezone])
+
   const renderSection = () => {
     switch (activeSection) {
       case "sectionPayload":
@@ -247,7 +299,7 @@ export default function DeviceDetailPage() {
             <div className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <ConsumptionHeatmap readings={consumptionReadings} unit={unit} />
-                <DailyConsumptionChart data={dailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
+                <DailyConsumptionChart data={dailyData} inhouseData={inhouseDailyData} unit={unit} dailyWindowDays={CONSUMPTION_DAYS} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
