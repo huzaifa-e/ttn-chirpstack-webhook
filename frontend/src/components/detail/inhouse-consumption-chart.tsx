@@ -54,7 +54,7 @@ export function InhouseConsumptionChart({ uplinks }: { uplinks: Uplink[] }) {
           <CartesianGrid strokeDasharray="3 3" className="opacity-20" />
           <XAxis dataKey="time" tick={{ fontSize: 9 }} angle={-45} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 10 }} tickFormatter={formatChartNumber} label={{ value: "kWh", angle: -90, position: "insideLeft", style: { fontSize: 10 } }} />
-          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value: number | string | undefined, name: string | number) => [formatChartNumber(value), String(name)]} />
+          <Tooltip contentStyle={{ fontSize: 12, backgroundColor: "rgba(0,0,0,0.8)", border: "none", borderRadius: 8, color: "#fff" }} formatter={(value: number | string | undefined, name: string | number | undefined) => [formatChartNumber(value), String(name)]} />
           <Line dataKey="inhouse" name="Inhouse Verbrauch (kWh)" stroke="#0ea5e9" strokeWidth={2} dot={false} isAnimationActive={false} />
           {zoom.refAreaLeft && zoom.refAreaRight && (
             <>
